@@ -42,63 +42,64 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. Limit false positives on genuine human writing
 
-<!-- Your criterion. It must name a number. -->
+Of 10 paragraphs I wrote myself, at most 1 may receive the `ai` guess in each trial. At least 5 must receive `human`, so returning `unsure` for everything does not satisfy this criterion.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A false accusation can harm a genuine writer. I prioritize avoiding that harm while still requiring the service to recognize some human writing confidently.
 
 ---
 
-## 2.
+## 2. Separate clearly human and clearly AI-generated writing
 
-<!-- Your criterion. -->
+Using a fixed set of 10 human-written paragraphs and 10 unedited AI-generated paragraphs, the mean combined score for the AI set must exceed the mean for the human set by at least 0.15 in each trial. Paragraphs will contain 100–200 words and cover comparable topics.
 
-
-
-**Why this target:**
-
-
+**Why this target:** The scores should provide meaningful separation between these groups. Keeping length and topics comparable reduces obvious confounding, although this small test cannot establish general detection accuracy.
 
 ---
 
-## 3.
+## 3. Make all three labels reachable
 
-<!-- Your criterion. -->
+A fixed set of 12 calibration paragraphs must produce at least one `human`, one `unsure`, and one `ai` guess in every trial. Every response must contain a nonempty reader-facing label without placeholder text.
 
+The score boundaries must also map correctly:
 
+- Scores at or below 0.35 map to `human`.
+- Scores strictly between 0.35 and 0.65 map to `unsure`.
+- Scores at or above 0.65 map to `ai`.
 
-**Why this target:**
-
-
-
----
-
-## 4.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** Three configured labels are useful only if real submissions can reach them. Checking the boundaries separately ensures that the implementation matches the documented ranges.
 
 ---
 
-## 5.
+## 4. Record appeals and preserve the original decision
 
-<!-- Your criterion. -->
+For each of 3 valid submissions in each trial, an appeal using its returned `content_id` must:
 
+- Return HTTP 200 with the same `content_id` and status `under_review`.
+- Append an appeal event containing the content ID, creator ID, reasoning, timestamp, and status.
+- Preserve the original decision entry and its scores.
 
+An appeal for a nonexistent content ID must return HTTP 404 and must not create an under-review event.
 
-**Why this target:**
+**Why this target:** Writers need a reliable way to challenge a decision. Preserving the original entry makes both the assessment and the challenge visible in the audit history.
 
+---
 
+## 5. Reject invalid text without crashing
+
+Each of these requests must return HTTP 400 with a JSON response containing `error: "invalid_input"` and a nonempty `message`:
+
+1. Missing `text`.
+2. `text` set to an empty string.
+3. `text` containing only whitespace.
+4. `text` set to `null`.
+5. `text` set to a number.
+6. `text` containing 20,001 characters, exceeding the proposed 20,000-character limit.
+
+Use a valid `creator_id` for every case. None may return HTTP 500 or create a classification decision. After these requests, `GET /health` must still return HTTP 200.
+
+**Why this target:** Invalid submissions should receive understandable errors without disrupting the service. The length limit also bounds accepted input size, although it does not by itself provide complete resource protection.
 
 ---
 
