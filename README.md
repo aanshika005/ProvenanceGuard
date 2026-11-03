@@ -38,8 +38,15 @@
 
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
+### Submission Path
 
-
+1. **Receive the request — `app.py::submit`.** Accept the writer’s text and creator ID through `POST /submit`.
+2. **Validate the input.** Check that the body is a JSON object, the text is a nonempty string, and the creator ID is valid. Return a clear error for invalid input.
+3. **Assign a content ID.** Generate a unique identifier that connects the submission, its decision, and any later appeal.
+4. **Calculate both signals.** Use `detector.py::model_signal` to measure predictability and `stylometry.py::style_signal` to measure textual shape.
+5. **Combine the signals — `scoring.py::combine_signals`.** Calculate one combined score. Higher scores indicate more AI-like patterns.
+6. **Choose a label — `scoring.py::score_to_label`.** Map the score to `human`, `unsure`, or `ai`, accompanied by a reader-facing explanation.
+7. **Log and return the decision.** Record the timestamp, content ID, creator ID, both signal scores, combined score, guess, label, and status. Return the decision to the caller.
 
 ---
 
@@ -54,27 +61,44 @@
 ### Signal one — the model signal
 
 **What it measures:**
+The predictability of the text under a local language model, GPT-2 by default. `detector.py` calculates perplexity and converts it to a score between 0 and 1. Lower perplexity produces a higher AI-like score.
 
 **Why that might differ between human and AI writing:**
+AI-generated text may use predictable wording and common continuations. Human writing may contain more unexpected word choices and transitions.
 
 **What it can't see:**
+Predictability does not establish authorship. A person writing in simple, conventional English may receive a high AI-like score, while unusually worded AI text may receive a low score. The model also processes at most the configured 400 tokens, so later content does not affect this signal.
 
 ### Signal two — the style signal
 
 **What it measures:**
+The textual shape of a submission using:
+- Sentence-length variation.
+- Unique words relative to total words.
+- Punctuation relative to text length.
 
 **Why that might differ between human and AI writing:**
+AI-generated prose may have more uniform sentence lengths and recurring stylistic patterns. Human writing may vary more in sentence structure, vocabulary, and punctuation.
 
 **What it can't see:**
+Style measurements do not understand meaning or establish authorship. Typos, sentence splitting, and inserted quotations can change the measurements without changing who wrote the text. Vocabulary ratios also depend on text length.
 
 ### The combining rule
+The current combining rule in `scoring.py::combine_signals` uses equal weights:
+
+    combined_score = 0.5 * model_score + 0.5 * style_score
 
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
 **The rule:**
+**The rule:** Take the average of the model signal and the style signal, giving each equal influence. Both scores range from 0 to 1, with higher scores indicating more AI-like patterns. When the signals strongly disagree, their average moves toward the unsure range.
 
 **The numbers:**
+combined_score = 0.5 * model_score + 0.5 * style_score
+
+- Model signal weight: **50%**
+- Style signal weight: **50%**
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -82,8 +106,156 @@
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
+In a hypothetical example, the model signal gives a submission 0.9 because its wording is highly predictable, while the style signal gives it 0.1 because its sentence lengths and vocabulary appear varied.
 
+With equal weights:
 
+    combined_score = 0.5 * 0.9 + 0.5 * 0.1 = 0.5
+
+The combined score falls in the `unsure` range. This treats strong disagreement as uncertainty rather than allowing either signal to decide alone.
+
+---
+
+### Tracing a False Positive
+
+The following scenario is hypothetical and describes the planned behavior, not an actual test result.
+
+A student submits a paragraph they wrote themselves using simple vocabulary and regular sentence structures. The model signal gives it **0.85** because its wording is predictable. Suppose the completed style signal gives it **0.55**.
+
+With equal weights:
+
+```text
+combined_score = 0.5 * 0.85 + 0.5 * 0.55
+               = 0.70
+```
+
+Because the combined score exceeds the configured AI threshold of **0.65**, the system incorrectly classifies the student's work as AI.
+
+The proposed label says:
+
+> This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.
+
+The student can challenge the decision through `/appeal`, providing the submission's `content_id` and an explanation. The service records the appeal and marks the item as `under_review`, preserving the original decision.
+
+This scenario guides my threshold choices. I would prioritize reducing false accusations against genuine writers, accepting that a wider unsure range could allow more AI-generated text to avoid a confident AI label. Actual threshold changes will need evidence from testing.
+
+### Planned Endpoint Contracts
+
+These contracts describe the intended behavior.
+
+#### POST /submit
+
+Assesses a piece of text and records the decision.
+
+**Request**
+
+Send a JSON object with `Content-Type: application/json`:
+
+```json
+{
+  "text": "The writing to assess.",
+  "creator_id": "writer_123"
+}
+```
+
+| Field | Type | Requirement |
+|---|---|---|
+| `text` | string | Required; must contain non-whitespace text. Proposed maximum: 20,000 characters. |
+| `creator_id` | string | Required; must contain non-whitespace text. Proposed maximum: 100 characters. |
+
+**Successful response — HTTP 201**
+
+The following values illustrate the hypothetical false positive:
+
+```json
+{
+  "content_id": "unique-content-id",
+  "guess": "ai",
+  "confidence": 0.70,
+  "model_score": 0.85,
+  "style_score": 0.55,
+  "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+  "status": "decided"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `content_id` | Unique identifier connecting the decision to any later appeal. |
+| `guess` | One of `human`, `unsure`, or `ai`. |
+| `confidence` | Combined AI-like score between 0 and 1. This name is retained for compatibility with the supplied runners; it is not a calibrated probability of authorship. |
+| `model_score` | Model signal between 0 and 1; higher means more AI-like. |
+| `style_score` | Style signal between 0 and 1; higher means more AI-like. |
+| `label` | Explanation displayed to the writer. |
+| `status` | `decided` when the initial decision is recorded. |
+
+**Error responses**
+
+| HTTP status | Error | Meaning |
+|---|---|---|
+| 400 | `invalid_input` | Malformed JSON, a non-object body, or missing, empty, incorrectly typed, or oversized fields. |
+| 415 | `unsupported_media_type` | The request is not sent as JSON. |
+| 429 | `rate_limited` | The submission limit has been exceeded, once limiting is enabled. |
+| 503 | `detector_unavailable` | The model cannot produce a score. |
+
+All errors return a JSON object containing `error` and `message`:
+
+```json
+{
+  "error": "invalid_input",
+  "message": "The text field must be a nonempty string."
+}
+```
+
+#### POST /appeal
+
+Records a writer's challenge to an existing decision.
+
+**Request**
+
+Send a JSON object with `Content-Type: application/json`:
+
+```json
+{
+  "content_id": "unique-content-id",
+  "reasoning": "I wrote this myself and have earlier drafts."
+}
+```
+
+| Field | Type | Requirement |
+|---|---|---|
+| `content_id` | string | Required; must identify an existing decision. |
+| `reasoning` | string | Required; must contain non-whitespace text. Proposed maximum: 5,000 characters. |
+
+**Successful response — HTTP 200**
+
+```json
+{
+  "content_id": "unique-content-id",
+  "status": "under_review",
+  "message": "Your appeal has been recorded."
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `content_id` | Identifier of the decision being challenged. |
+| `status` | `under_review` after the appeal is recorded. |
+| `message` | Confirmation displayed to the writer. |
+
+The service retrieves the creator ID from the original decision and appends an appeal event containing the explanation. It preserves the original scores, guess, and label. A repeated valid appeal records the additional explanation while keeping the item `under_review`.
+
+**Error responses**
+
+| HTTP status | Error | Meaning |
+|---|---|---|
+| 400 | `invalid_input` | Malformed JSON, a non-object body, or missing, empty, incorrectly typed, or oversized fields. |
+| 404 | `content_not_found` | No decision exists for the supplied content ID. |
+| 415 | `unsupported_media_type` | The request is not sent as JSON. |
+
+Errors use the same `error` and `message` structure as `/submit`.
+
+An appeal does not automatically reverse the decision. This initial design does not authenticate callers, so a creator ID or content ID alone does not prove the caller's identity.
 
 ---
 
