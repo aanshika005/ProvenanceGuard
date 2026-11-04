@@ -292,7 +292,7 @@ These scores measure predictability and do not establish authorship.
 
 ## Sample Run
 
-### AI Label
+### AI Label: Submission and Appeal
 
 #### Submission
 
@@ -388,7 +388,7 @@ curl "http://127.0.0.1:5001/log?limit=2"
 The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`.
 
 
-### Unsure Label
+### Unsure Label: Submission and Appeal
 
 #### Submission
 
@@ -582,35 +582,6 @@ curl "http://127.0.0.1:5001/log?limit=2"
 The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`; the appeal does not automatically reverse the original assessment.
 
 ---
-## What This Does
-
-Provenance Guard is a local web service that assesses text using two signals: predictability under a language model and measurable writing-style patterns.
-
-A submission follows this path:
-
-1. **Receive and validate:** `/submit` accepts JSON containing `text` and `creator_id` and checks the input.
-2. **Measure predictability:** `detector.py::model_signal` uses a local GPT-2 model to calculate an AI-like score from perplexity.
-3. **Measure style:** `stylometry.py::style_signal` measures sentence-length variation, vocabulary repetition, and punctuation density.
-4. **Combine scores:** `scoring.py::combine_signals` gives each signal equal weight.
-5. **Assign a label:** `scoring.py::score_to_label` maps the combined score to `human`, `unsure`, or `ai`, with a full explanation.
-6. **Record and return:** The service generates a content ID, writes the decision and scores to `logs/audit.jsonl`, and returns the result.
-7. **Allow an appeal:** `/appeal` accepts the content ID and reasoning, appends an `under_review` event, and preserves the original decision.
-
-The scores measure patterns associated with AI-generated writing; they do not establish authorship. Testing demonstrated all three labels, including an AI-generated narrative that incorrectly received a human label.
-
-## How I Used AI
-
-### Moment 1: Building the submission endpoint
-
-- **What I asked for:** Help completing Milestone 3 and understanding where to replace the unfinished `/submit` handler.
-- **What came back:** A hardcoded response for checking the route, followed by implementation guidance for input validation, calling the model, generating a content ID, and recording the decision.
-- **What I changed:** I replaced the unfinished handler with the assisted implementation and tested it with `curl`. I checked that `/log` contained the same content ID and model score as the response. Later, I added the second signal and combined scoring.
-
-### Moment 2: Testing label reachability
-
-- **What I asked for:** A test paragraph that might produce a human label after my earlier submissions returned AI or unsure.
-- **What came back:** An AI-generated narrative with unusual details and varied sentence lengths, with no guarantee of its classification.
-- **What I changed:** I submitted the paragraph as calibration text and recorded the actual results: model score 0.2758, style score 0.1406, and combined score 0.2082. It received a human label. I documented this as both evidence of label reachability and a false negative, then tested an appeal explaining that the paragraph was AI-generated.
 
 ## How I Used AI
 
