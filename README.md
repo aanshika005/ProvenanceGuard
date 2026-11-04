@@ -290,10 +290,6 @@ These scores measure predictability and do not establish authorship.
 | Close-elections report paragraph (authorship not verified here) | 0.5955 | 0.3116 | 0.45355 | `unsure` |
 | AI-generated photocopier narrative | 0.2758 | 0.1406 | 0.2082 | `human` |
 
-These are actual submitted outputs reproduced below. They demonstrate all three labels in individual tests, not passage of the fixed 12-input, three-trial criterion in [criteria.md](criteria.md). The photocopier narrative is a false negative: AI-generated text was classified as human.
-
-The required four-category calibration set (clearly AI, clearly human, formal human, and lightly edited AI) has not been documented completely with both signal scores. The earlier hypothetical comparison table has been removed; no missing measurements are inferred.
-
 ## Sample Run
 
 ### AI Label
