@@ -1,38 +1,31 @@
 # Provenance Guard
 
-> ### 👋 Start here
->
-> **New to this repo? Read [RUNNING.md](RUNNING.md) first.**
->
-> Once `python test.py` passes, in one terminal:
->
-> ```bash
-> python app.py
-> ```
->
-> and in another:
->
-> ```bash
-> curl -X POST http://127.0.0.1:5000/ping \
->   -H "Content-Type: application/json" \
->   -d '{"message": "hello"}'
-> ```
->
-> That's a web service. Something sent it text and it sent something back.
-> Everything this unit is filling in the middle.
->
-> **The rest of this file is your submission.** Fill it in as you go.
+A local text-assessment service using GPT-2 predictability and writing-style measurements. Scores describe AI-like patterns and do not establish authorship.
+
+## Running Locally
+
+See [RUNNING.md](RUNNING.md) for full setup instructions.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python test.py
+python detector.py
+PORT=5001 python app.py
+```
+
+The detector downloads its model on first use. Port 5001 avoids the macOS AirPlay/AirTunes conflict encountered on port 5000. In another terminal:
+
+```bash
+curl -X POST http://127.0.0.1:5001/ping \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"hello"}'
+```
+
+**Repository:** https://github.com/aanshika005/ProvenanceGuard
 
 ---
-
-<!-- ─────────────────────────────────────────────────────────────────────────
-     Unit 7 asks for the first five sections. Unit 8 adds the five below.
-
-     Everything is pasted as TEXT. A pasted curl response gets full credit;
-     a picture of your terminal gets none.
-     ───────────────────────────────────────────────────────────────────────── -->
-
-<!-- ═══════════════════════ UNIT 7 — THE BUILD ═══════════════════════ -->
 
 ## What This Does
 Provenance Guard is a local web service that assesses text using two signals: predictability under a language model and measurable writing-style patterns.
@@ -43,11 +36,11 @@ A submission follows this path:
 
 1. **Receive the request — `app.py::submit`.** Accept the writer’s text and creator ID through `POST /submit`.
 2. **Validate the input.** Check that the body is a JSON object, the text is a nonempty string, and the creator ID is valid. Return a clear error for invalid input.
-3. **Assign a content ID.** Generate a unique identifier that connects the submission, its decision, and any later appeal.
-4. **Calculate both signals.** Use `detector.py::model_signal` to measure predictability and `stylometry.py::style_signal` to measure textual shape.
+3. **Calculate the model signal.** Use `detector.py::model_signal` to measure predictability.
+4. **Calculate the style signal.** Use `stylometry.py::style_signal` to measure textual shape.
 5. **Combine the signals — `scoring.py::combine_signals`.** Calculate one combined score. Higher scores indicate more AI-like patterns.
 6. **Choose a label — `scoring.py::score_to_label`.** Map the score to `human`, `unsure`, or `ai`, accompanied by a reader-facing explanation.
-7. **Log and return the decision.** Record the timestamp, content ID, creator ID, both signal scores, combined score, guess, label, and status. Return the decision to the caller.
+7. **Assign an ID, log, and return.** Generate a unique content ID and record the timestamp, content ID, creator ID, both signal scores, combined score, guess, label, and status. Return the decision to the caller. `/appeal` later uses the same ID to append an `under_review` event while preserving the original decision.
 
 ---
 
@@ -78,6 +71,14 @@ The textual shape of a submission using:
 - Unique words relative to total words.
 - Punctuation relative to text length.
 
+**Implemented measurements and normalization:**
+
+- Sentence spread is the sample standard deviation of sentence word counts divided by their mean. Its AI-like contribution is `1 - min(spread / 1.0, 1.0)`.
+- Type-token ratio is unique lowercase word tokens divided by total word tokens. Its AI-like contribution is `1 - type_token_ratio`.
+- Punctuation density is the number of characters in the implementation's punctuation set divided by all characters. Its AI-like contribution is `1 - min(density / 0.05, 1.0)`.
+
+`style_signal = 0.5 * spread_ai + 0.3 * vocabulary_ai + 0.2 * punctuation_ai`, clamped to [0, 1] and rounded to four decimals. Fewer than 20 word tokens or fewer than two nonempty sentences returns 0.5. The scales and directions are heuristic choices, not calibrated authorship probabilities. The simple sentence splitter can split abbreviations, and the word tokenizer is limited to ASCII letters, digits, and apostrophes.
+
 **Why that might differ between human and AI writing:**
 AI-generated prose may have more uniform sentence lengths and recurring stylistic patterns. Human writing may vary more in sentence structure, vocabulary, and punctuation.
 
@@ -92,7 +93,6 @@ The current combining rule in `scoring.py::combine_signals` uses equal weights:
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
 **The rule:** Take the average of the model signal and the style signal, giving each equal influence. Both scores range from 0 to 1, with higher scores indicating more AI-like patterns. When the signals strongly disagree, their average moves toward the unsure range.
 
 **The numbers:**
@@ -107,13 +107,9 @@ combined_score = 0.5 * model_score + 0.5 * style_score
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
-In a hypothetical example, the model signal gives a submission 0.9 because its wording is highly predictable, while the style signal gives it 0.1 because its sentence lengths and vocabulary appear varied.
 
-With equal weights:
+For the close-elections report paragraph, the model score was **0.5955** and the style score was **0.3116**, a difference of **0.2839**. Their average was **0.45355**, producing `unsure`. The model leaned toward AI-like predictability while the style signal leaned toward human-like shape. The recorded response appears below.
 
-    combined_score = 0.5 * 0.9 + 0.5 * 0.1 = 0.5
-
-The combined score falls in the `unsure` range. This treats strong disagreement as uncertainty rather than allowing either signal to decide alone.
 
 ---
 
@@ -140,9 +136,9 @@ The student can challenge the decision through `/appeal`, providing the submissi
 
 This scenario guides my threshold choices. I would prioritize reducing false accusations against genuine writers, accepting that a wider unsure range could allow more AI-generated text to avoid a confident AI label. Actual threshold changes will need evidence from testing.
 
-### Planned Endpoint Contracts
+### Endpoint Contracts
 
-These contracts describe the intended behavior.
+These contracts describe the implemented success and validation responses. Rate limiting is reserved for Unit 8 and is currently inactive.
 
 #### POST /submit
 
@@ -161,8 +157,8 @@ Send a JSON object with `Content-Type: application/json`:
 
 | Field | Type | Requirement |
 |---|---|---|
-| `text` | string | Required; must contain non-whitespace text. Proposed maximum: 20,000 characters. |
-| `creator_id` | string | Required; must contain non-whitespace text. Proposed maximum: 100 characters. |
+| `text` | string | Required; must contain non-whitespace text. Maximum: 20,000 characters. |
+| `creator_id` | string | Required; must contain non-whitespace text. Maximum: 100 characters. |
 
 **Successful response — HTTP 201**
 
@@ -226,7 +222,7 @@ Send a JSON object with `Content-Type: application/json`:
 | Field | Type | Requirement |
 |---|---|---|
 | `content_id` | string | Required; must identify an existing decision. |
-| `reasoning` | string | Required; must contain non-whitespace text. Proposed maximum: 5,000 characters. |
+| `reasoning` | string | Required; must contain non-whitespace text. Maximum: 5,000 characters. |
 
 **Successful response — HTTP 200**
 
@@ -273,91 +269,9 @@ An appeal does not automatically reverse the decision. This initial design does 
 The wording communicates uncertainty without accusing the writer. Weak or conflicting signals do not establish AI use, and a genuine writer may receive this result.
 
 
-## Sample Run
-
-<!-- One submission and one appeal, pasted as text: the request, the response,
-     and the log entries. -->
-
-**A submission**
-
-<!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
-Request: 
-
-```bash
-$ curl -i -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Yesterday I went to the library to finish my assignment. I spent most of the afternoon reviewing my notes. Before leaving, I checked out a book for next week.","creator_id":"writer_123"}'
-```
-
-Response: HTTP/1.1 201 CREATED
-
-```json
-{
-  "confidence": null,
-  "content_id": "4d471ed0-fe57-46cc-8f71-171e5d01452d",
-  "guess": "pending",
-  "label": "Model signal calculated; final assessment is not available yet.",
-  "model_score": 0.8272,
-  "status": "decided",
-  "style_score": null
-}
-```
-
-**An appeal**
-
-```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
-```
-
-```json
-
-```
-
-**What the log shows afterwards**
-Request:
-
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
-```
-
-Response: 
-
-```json
-{
-  "count": 2,
-  "entries": [
-    {
-      "combined_score": null,
-      "content_id": "2ea4912d-158e-45da-980f-15e3c895477e",
-      "creator_id": "writer_123",
-      "guess": "pending",
-      "label": "Model signal calculated; final assessment is not available yet.",
-      "model_score": 0.8272,
-      "status": "decided",
-      "style_score": null,
-      "timestamp": "2026-11-03T04:04:01+00:00"
-    },
-    {
-      "combined_score": null,
-      "content_id": "4d471ed0-fe57-46cc-8f71-171e5d01452d",
-      "creator_id": "writer_123",
-      "guess": "pending",
-      "label": "Model signal calculated; final assessment is not available yet.",
-      "model_score": 0.8272,
-      "status": "decided",
-      "style_score": null,
-      "timestamp": "2026-11-03T04:52:42+00:00"
-    }
-  ]
-}
-```
-
 ### Standalone Detector Tests
+
+Recorded standalone readings; the full input paragraphs and terminal transcripts are not included here.
 
 | Input | Perplexity | Model score |
 |---|---|---|
@@ -367,20 +281,24 @@ Response:
 
 These scores measure predictability and do not establish authorship.
 
-### Illustrative Signal Comparison
 
-| Test input | Model score | Style score | Combined score | Observation |
+### Recorded Signal Comparison and Label Coverage
+
+| Test input | Model score | Style score | Combined score | Returned label |
 |---|---:|---:|---:|---|
-| Clearly AI-generated text | 0.90 | 0.80 | 0.85 | Both signals indicate AI-like patterns. |
-| Clearly human-written text | 0.20 | 0.30 | 0.25 | Both signals indicate human-like patterns. |
-| Formal human writing | 0.30 | 0.80 | 0.55 | Signals disagree; averaging places the score in the unsure range. |
-| Lightly-edited AI text | 0.80 | 0.40 | 0.60 | Editing changes stylistic patterns; the combined score falls in the unsure range. |
+| AI-assisted library paragraph | 0.8272 | 0.6206 | 0.7239 | `ai` |
+| Close-elections report paragraph (authorship not verified here) | 0.5955 | 0.3116 | 0.45355 | `unsure` |
+| AI-generated photocopier narrative | 0.2758 | 0.1406 | 0.2082 | `human` |
 
-Combined score = 0.5 × model score + 0.5 × style score.
+These are actual submitted outputs reproduced below. They demonstrate all three labels in individual tests, not passage of the fixed 12-input, three-trial criterion in [criteria.md](criteria.md). The photocopier narrative is a false negative: AI-generated text was classified as human.
+
+The required four-category calibration set (clearly AI, clearly human, formal human, and lightly edited AI) has not been documented completely with both signal scores. The earlier hypothetical comparison table has been removed; no missing measurements are inferred.
 
 ## Sample Run
 
-### A Submission
+### AI Label
+
+#### Submission
 
 **Request:**
 
@@ -412,7 +330,7 @@ The combined score is the average of the two signals:
 
 This exceeds the AI threshold of 0.65, producing the `ai` guess. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship. This test paragraph was supplied by an AI assistant and is not evidence of a false positive on human writing.
 
-### An Appeal
+#### Appeal
 
 **Request:**
 
@@ -434,7 +352,7 @@ curl -i -X POST http://127.0.0.1:5001/appeal \
 
 The reasoning above was used to test the appeal endpoint; it does not establish the test paragraph's authorship.
 
-### What the Log Shows Afterwards
+#### Audit Log After the Appeal
 
 **Request:**
 
@@ -474,9 +392,9 @@ curl "http://127.0.0.1:5001/log?limit=2"
 The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`.
 
 
-## Sample Run
+### Unsure Label
 
-### A Submission
+#### Submission
 
 **Request:**
 
@@ -508,7 +426,7 @@ The combined score was calculated using equal weights:
 
 The score falls within the unsure range: 0.35 < score < 0.65. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship.
 
-### An Appeal
+#### Appeal
 
 **Request:**
 
@@ -528,7 +446,7 @@ curl -i -X POST http://127.0.0.1:5001/appeal \
 }
 ```
 
-### What the Log Shows Afterwards
+#### Audit Log After the Appeal
 
 **Request:**
 
@@ -567,7 +485,7 @@ curl "http://127.0.0.1:5001/log?limit=2"
 
 The original decision is preserved. A separate appeal event records the reasoning and `under_review` status using the same content ID. This demonstrates that the appeal was recorded; it does not establish authorship or reverse the original assessment.
 
-### Sample Run: Human Label and Appeal
+### Human Label: Submission and Appeal
 
 The following AI-generated paragraph received a `human` label. This demonstrates that the label is reachable, while also showing a false negative.
 
@@ -668,6 +586,31 @@ curl "http://127.0.0.1:5001/log?limit=2"
 The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`; the appeal does not automatically reverse the original assessment.
 
 ---
+
+
+## How I Used AI
+
+### Moment 1: Building the Submission Endpoint
+
+- **What I asked for:** Help completing Milestone 3 and understanding where to replace the unfinished `/submit` handler.
+- **What came back:** A hardcoded response for checking the route, followed by suggested code for validation, calling the model, generating a content ID, and audit logging.
+- **What I changed:** I replaced the unfinished handler with the assisted implementation and tested it using `curl`. I verified that the response and log contained the same content ID and model score. Later I connected the style signal, combined score, and final labels.
+
+### Moment 2: Testing Label Reachability
+
+- **What I asked for:** A paragraph that might produce a human label after earlier submissions returned AI or unsure.
+- **What came back:** An AI-generated narrative with unusual details and varied sentence lengths, without a guarantee of its classification.
+- **What I changed:** I submitted it as calibration text and recorded model score 0.2758, style score 0.1406, and combined score 0.2082. I documented the human result as a false negative as well as evidence of label reachability. I then tested an appeal explicitly stating that the paragraph was AI-generated.
+
+## Evaluation Status and Limitations
+
+The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Input validation errors currently return without an audit rejection entry.
+
+The scores are sensitive to wording and textual shape. The AI-generated narrative receiving a human label demonstrates that these signals cannot establish provenance. The service does not authenticate creator IDs or appeal callers, and review is recorded rather than automatically resolved.
+
+## Unit 8 — Pending Evaluation
+
+The following sections are reserved for Unit 8. No full attack run, repeated criterion evaluation, flood transcript, or measured before/after improvement is claimed here. Rate limiting is disabled by default and the submit limiter decorator is commented out.
 
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
