@@ -261,25 +261,7 @@ An appeal does not automatically reverse the decision. This initial design does 
 
 ## Label Variants
 
-<!-- The exact text of all three labels, as a reader would see them, and the
-     score range each covers.
 
-     Write them for someone who has never heard the word "threshold". -->
-
-| Label | Score range | The exact text a reader sees |
-|---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
-
-**Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
-
-
-
----
 
 ## Sample Run
 
@@ -292,15 +274,26 @@ An appeal does not automatically reverse the decision. This initial design does 
      signal scores - model_score and style_score. Unit 8's tools read those
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
+Request: 
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
+$ curl -i -X POST http://127.0.0.1:5000/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text":"Yesterday I went to the library to finish my assignment. I spent most of the afternoon reviewing my notes. Before leaving, I checked out a book for next week.","creator_id":"writer_123"}'
 ```
 
-```json
+Response: HTTP/1.1 201 CREATED
 
+```json
+{
+  "confidence": null,
+  "content_id": "4d471ed0-fe57-46cc-8f71-171e5d01452d",
+  "guess": "pending",
+  "label": "Model signal calculated; final assessment is not available yet.",
+  "model_score": 0.8272,
+  "status": "decided",
+  "style_score": null
+}
 ```
 
 **An appeal**
@@ -316,14 +309,53 @@ $ curl -X POST http://127.0.0.1:5000/appeal \
 ```
 
 **What the log shows afterwards**
+Request:
 
 ```bash
 $ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
-```json
+Response: 
 
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": null,
+      "content_id": "2ea4912d-158e-45da-980f-15e3c895477e",
+      "creator_id": "writer_123",
+      "guess": "pending",
+      "label": "Model signal calculated; final assessment is not available yet.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-03T04:04:01+00:00"
+    },
+    {
+      "combined_score": null,
+      "content_id": "4d471ed0-fe57-46cc-8f71-171e5d01452d",
+      "creator_id": "writer_123",
+      "guess": "pending",
+      "label": "Model signal calculated; final assessment is not available yet.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-03T04:52:42+00:00"
+    }
+  ]
+}
 ```
+
+### Standalone Detector Tests
+
+| Input | Perplexity | Model score |
+|---|---|---|
+| Unedited AI-generated paragraph | 27.2 | 0.6910 |
+| My own human-written paragraph | 44.5 | 0.5044 |
+| AI-generated paragraph I edited | 18.5 | 0.8056 |
+
+These scores measure predictability and do not establish authorship.
 
 ---
 
