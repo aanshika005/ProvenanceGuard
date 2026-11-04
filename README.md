@@ -35,10 +35,11 @@
 <!-- ═══════════════════════ UNIT 7 — THE BUILD ═══════════════════════ -->
 
 ## What This Does
-
+Provenance Guard is a local web service that assesses text using two signals: predictability under a language model and measurable writing-style patterns.
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 ### Submission Path
+A submission follows this path:
 
 1. **Receive the request — `app.py::submit`.** Accept the writer’s text and creator ID through `POST /submit`.
 2. **Validate the input.** Check that the body is a JSON object, the text is a nonempty string, and the creator ID is valid. Return a clear error for invalid input.
@@ -261,6 +262,15 @@ An appeal does not automatically reverse the decision. This initial design does 
 
 ## Label Variants
 
+| Label | Score range | The exact text a reader sees |
+|---|---|---|
+| high-confidence human | 0.00 ≤ score ≤ 0.35 | This text appears likely to have been written by a person. This assessment is not proof of authorship. |
+| unsure | 0.35 < score < 0.65 | We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use. |
+| high-confidence AI | 0.65 ≤ score ≤ 1.00 | This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review. |
+
+**Why I worded the "unsure" one this way:**
+
+The wording communicates uncertainty without accusing the writer. Weak or conflicting signals do not establish AI use, and a genuine writer may receive this result.
 
 
 ## Sample Run
@@ -357,21 +367,308 @@ Response:
 
 These scores measure predictability and do not establish authorship.
 
+### Illustrative Signal Comparison
+
+| Test input | Model score | Style score | Combined score | Observation |
+|---|---:|---:|---:|---|
+| Clearly AI-generated text | 0.90 | 0.80 | 0.85 | Both signals indicate AI-like patterns. |
+| Clearly human-written text | 0.20 | 0.30 | 0.25 | Both signals indicate human-like patterns. |
+| Formal human writing | 0.30 | 0.80 | 0.55 | Signals disagree; averaging places the score in the unsure range. |
+| Lightly-edited AI text | 0.80 | 0.40 | 0.60 | Editing changes stylistic patterns; the combined score falls in the unsure range. |
+
+Combined score = 0.5 × model score + 0.5 × style score.
+
+## Sample Run
+
+### A Submission
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Yesterday I went to the library to finish my assignment. I spent most of the afternoon reviewing my notes. Before leaving, I checked out a book for next week.","creator_id":"writer_123"}'
+```
+
+**Response — HTTP 201 Created:**
+
+```json
+{
+  "confidence": 0.7239,
+  "content_id": "166a7106-1f39-4795-8289-0ef9967ea77c",
+  "guess": "ai",
+  "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+  "model_score": 0.8272,
+  "status": "decided",
+  "style_score": 0.6206
+}
+```
+
+The combined score is the average of the two signals:
+
+```text
+0.5 × 0.8272 + 0.5 × 0.6206 = 0.7239
+```
+
+This exceeds the AI threshold of 0.65, producing the `ai` guess. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship. This test paragraph was supplied by an AI assistant and is not evidence of a false positive on human writing.
+
+### An Appeal
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id":"166a7106-1f39-4795-8289-0ef9967ea77c","reasoning":"I wrote this myself and would like the assessment reviewed."}'
+```
+
+**Response — HTTP 200 OK:**
+
+```json
+{
+  "content_id": "166a7106-1f39-4795-8289-0ef9967ea77c",
+  "message": "Your appeal has been recorded.",
+  "status": "under_review"
+}
+```
+
+The reasoning above was used to test the appeal endpoint; it does not establish the test paragraph's authorship.
+
+### What the Log Shows Afterwards
+
+**Request:**
+
+```bash
+curl "http://127.0.0.1:5001/log?limit=2"
+```
+
+**Response:**
+
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.7239,
+      "content_id": "166a7106-1f39-4795-8289-0ef9967ea77c",
+      "creator_id": "writer_123",
+      "guess": "ai",
+      "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": 0.6206,
+      "timestamp": "2026-11-04T06:50:05+00:00"
+    },
+    {
+      "content_id": "166a7106-1f39-4795-8289-0ef9967ea77c",
+      "creator_id": "writer_123",
+      "event": "appeal",
+      "reasoning": "I wrote this myself and would like the assessment reviewed.",
+      "status": "under_review",
+      "timestamp": "2026-11-04T06:52:00+00:00"
+    }
+  ]
+}
+```
+
+The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`.
+
+
+## Sample Run
+
+### A Submission
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text":"This report explores the real-life impact of some of these close elections. Even though millions of Americans vote in presidential elections, the winner can be elected by just a handful of voters—less than the attendance for a baseball game or concert. This report examines examples of the policy impacts that these few votes can have, including how 312 votes cast in one state helped more than 40 million Americans access affordable health care, how 321 votes cast in one state legislative race in Minnesota helped shape the state’s laws, and how party control of the Virginia House of Delegates came down to a tie in one legislative race—meaning just one more person showing up to vote could have decided party control. Finally, the report discusses the importance of local elections and why voting in these elections is extremely powerful.","creator_id":"writer_124"}'
+```
+
+**Response — HTTP 201 Created:**
+
+```json
+{
+  "confidence": 0.45355,
+  "content_id": "6f4e9bda-2694-452d-9380-f918bb474ef5",
+  "guess": "unsure",
+  "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+  "model_score": 0.5955,
+  "status": "decided",
+  "style_score": 0.3116
+}
+```
+
+The combined score was calculated using equal weights:
+
+```text
+0.5 × 0.5955 + 0.5 × 0.3116 = 0.45355
+```
+
+The score falls within the unsure range: 0.35 < score < 0.65. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship.
+
+### An Appeal
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id":"6f4e9bda-2694-452d-9380-f918bb474ef5","reasoning":"I wrote this myself and would like the assessment reviewed."}'
+```
+
+**Response — HTTP 200 OK:**
+
+```json
+{
+  "content_id": "6f4e9bda-2694-452d-9380-f918bb474ef5",
+  "message": "Your appeal has been recorded.",
+  "status": "under_review"
+}
+```
+
+### What the Log Shows Afterwards
+
+**Request:**
+
+```bash
+curl "http://127.0.0.1:5001/log?limit=2"
+```
+
+**Response:**
+
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.45355,
+      "content_id": "6f4e9bda-2694-452d-9380-f918bb474ef5",
+      "creator_id": "writer_124",
+      "guess": "unsure",
+      "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+      "model_score": 0.5955,
+      "status": "decided",
+      "style_score": 0.3116,
+      "timestamp": "2026-11-04T06:59:18+00:00"
+    },
+    {
+      "content_id": "6f4e9bda-2694-452d-9380-f918bb474ef5",
+      "creator_id": "writer_124",
+      "event": "appeal",
+      "reasoning": "I wrote this myself and would like the assessment reviewed.",
+      "status": "under_review",
+      "timestamp": "2026-11-04T07:00:27+00:00"
+    }
+  ]
+}
+```
+
+The original decision is preserved. A separate appeal event records the reasoning and `under_review` status using the same content ID. This demonstrates that the appeal was recorded; it does not establish authorship or reverse the original assessment.
+
+### Sample Run: Human Label and Appeal
+
+The following AI-generated paragraph received a `human` label. This demonstrates that the label is reachable, while also showing a false negative.
+
+#### Submission
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/submit \
+  -H "Content-Type: application/json" \
+  --data-binary @- <<'JSON'
+{
+  "text": "By 6:43 a.m., the photocopier had swallowed page seventeen, somebody had misplaced the brass key to the equipment cupboard, and Meera was balancing a cracked blue mug on a stack of unsigned reimbursement forms. Then the lights flickered. Twice. Outside, a delivery driver in mismatched gloves insisted that twelve kilograms of aubergines belonged to our department; his receipt, unfortunately, named a veterinary clinic in another postcode. Nobody knew what to do. I fetched the caretaker, who examined the cartons, muttered something about Thursday, and disappeared down the stairwell carrying a single aubergine. The photocopier remained unconvinced.",
+  "creator_id": "calibration_ai_specific"
+}
+JSON
+```
+
+**Response — HTTP 201 Created:**
+
+```json
+{
+  "confidence": 0.2082,
+  "content_id": "6fc5ba67-6be4-4ba9-9982-fcd86d9e3536",
+  "guess": "human",
+  "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+  "model_score": 0.2758,
+  "status": "decided",
+  "style_score": 0.1406
+}
+```
+
+The combined score was:
+
+```text
+0.5 × 0.2758 + 0.5 × 0.1406 = 0.2082
+```
+
+Because the score was below 0.35, the system returned `human`. The `confidence` field represents the combined AI-like score, not a calibrated probability of authorship.
+
+#### Appeal
+
+**Request:**
+
+```bash
+curl -i -X POST http://127.0.0.1:5001/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id":"6fc5ba67-6be4-4ba9-9982-fcd86d9e3536","reasoning":"This paragraph was AI-generated but received a human label. Please review the assessment."}'
+```
+
+**Response — HTTP 200 OK:**
+
+```json
+{
+  "content_id": "6fc5ba67-6be4-4ba9-9982-fcd86d9e3536",
+  "message": "Your appeal has been recorded.",
+  "status": "under_review"
+}
+```
+
+#### Audit Log After the Appeal
+
+**Request:**
+
+```bash
+curl "http://127.0.0.1:5001/log?limit=2"
+```
+
+**Response:**
+
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.2082,
+      "content_id": "6fc5ba67-6be4-4ba9-9982-fcd86d9e3536",
+      "creator_id": "calibration_ai_specific",
+      "guess": "human",
+      "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+      "model_score": 0.2758,
+      "status": "decided",
+      "style_score": 0.1406,
+      "timestamp": "2026-11-04T07:18:31+00:00"
+    },
+    {
+      "content_id": "6fc5ba67-6be4-4ba9-9982-fcd86d9e3536",
+      "creator_id": "calibration_ai_specific",
+      "event": "appeal",
+      "reasoning": "This paragraph was AI-generated but received a human label. Please review the assessment.",
+      "status": "under_review",
+      "timestamp": "2026-11-04T07:21:35+00:00"
+    }
+  ]
+}
+```
+
+The log preserves the original decision and appends an appeal event with the same content ID. The latest event records the item as `under_review`; the appeal does not automatically reverse the original assessment.
+
 ---
 
-## How I Used AI
-
-**Moment 1**
-
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
-
-**Moment 2**
-
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 

@@ -30,6 +30,8 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import stylometry
+import scoring
 
 app = Flask(__name__)
 
@@ -208,19 +210,21 @@ def submit():
             "message": "The text could not be scored. Please provide several sentences.",
         }), 400
 
+    style_score = stylometry.style_signal(text)
+    combined_score = scoring.combine_signals(model_score, style_score)
+
     content_id = str(uuid.uuid4())
 
     # Temporary values: final scoring and labels come later.
-    guess = "pending"
-    label = "Model signal calculated; final assessment is not available yet."
+    guess, label = scoring.score_to_label(combined_score)
 
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
         guess=guess,
         model_score=model_score,
-        style_score=None,
-        combined_score=None,
+        style_score=style_score,
+        combined_score=combined_score,
         label=label,
         status="decided",
     )
@@ -229,8 +233,8 @@ def submit():
         "content_id": content_id,
         "guess": guess,
         "model_score": model_score,
-        "style_score": None,
-        "confidence": None,
+        "style_score": style_score,
+        "confidence": combined_score,
         "label": label,
         "status": "decided",
     }), 201  
@@ -238,32 +242,66 @@ def submit():
 
 @app.post("/appeal")
 def appeal():
-    """
-    A writer says you got it wrong. ← TODO — Milestone 5
+    if not request.is_json:
+        return jsonify({
+            "error": "unsupported_media_type",
+            "message": "Send the request as application/json.",
+        }), 415
 
-    Expects JSON:
-        {"content_id": "...", "reasoning": "..."}
+    payload = request.get_json(silent=True)
 
-    Should:
-      1. Check the content_id actually exists — `audit.entries_for(id)` tells
-         you. A typo here fails silently and looks like a broken endpoint,
-         which is the single most common way this milestone eats an hour.
-      2. Record the appeal with `audit.log_appeal(...)`, which moves the item
-         to `under_review`.
-      3. Confirm to the writer. No automatic re-checking needed.
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "invalid_input",
+            "message": "The request body must be a valid JSON object.",
+        }), 400
 
-    This is the smallest endpoint in the project and the one that matters most
-    to the person on the other end. It's the only thing standing between a
-    wrong accusation and nothing at all.
-    """
-    payload = request.get_json(silent=True) or {}
+    content_id = payload.get("content_id")
+    reasoning = payload.get("reasoning")
 
-    # TODO: delete this and build the route.
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({
+            "error": "invalid_input",
+            "message": "content_id must be a nonempty string.",
+        }), 400
+
+    if (
+        not isinstance(reasoning, str)
+        or not reasoning.strip()
+        or len(reasoning) > 5000
+    ):
+        return jsonify({
+            "error": "invalid_input",
+            "message": "reasoning must be a nonempty string of at most 5,000 characters.",
+        }), 400
+
+    content_id = content_id.strip()
+    reasoning = reasoning.strip()
+
+    entries = audit.entries_for(content_id)
+    original = next(
+        (entry for entry in entries if entry.get("status") == "decided"),
+        None,
+    )
+
+    if original is None:
+        return jsonify({
+            "error": "content_not_found",
+            "message": "No decision exists for this content ID.",
+        }), 404
+
+    audit.log_appeal(
+        content_id=content_id,
+        creator_id=original["creator_id"],
+        reasoning=reasoning,
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": "under_review",
+        "message": "Your appeal has been recorded.",
+    }), 200
+    
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
