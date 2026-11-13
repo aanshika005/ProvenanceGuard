@@ -597,6 +597,24 @@ The log preserves the original decision and appends an appeal event with the sam
 - **What came back:** An AI-generated narrative with unusual details and varied sentence lengths, without a guarantee of its classification.
 - **What I changed:** I submitted it as calibration text and recorded model score 0.2758, style score 0.1406, and combined score 0.2082. I documented the human result as a false negative as well as evidence of label reachability. I then tested an appeal explicitly stating that the paragraph was AI-generated.
 
+### Moment 3: Rate Limits and Audit Logging
+
+- **What I asked for:** Help completing this unit's limiter and logging milestone.
+- **What came back:** AI enabled the limiter, added rejection logging, ran the flood check, and wrote up the results.
+- **What I changed:** I reviewed the README and asked for extra tests, duplicate files, and unnecessary wording to be removed.
+
+### Moment 4: Running and Diagnosing the Tests
+
+- **What I asked for:** Help running the supplied attack set and my five criteria, recording the results, and explaining the misses.
+- **What came back:** AI filled in `scenarios.py`, extended `run_eval.py` for appeals and the other required checks, ran three trials, and drafted the verdicts and diagnoses.
+- **What I changed:** I supplied the ten human passages used in the final run after the first attempt used AI-written substitutes. AI generated the ten comparison paragraphs on matching topics. I reviewed the results and requested simpler wording before approving the push.
+
+### Moment 5: One Improvement and Its Tradeoff
+
+- **What I asked for:** One change based on the diagnosis, followed by both full reruns and an honest comparison.
+- **What came back:** AI raised the AI threshold from 0.65 to 0.70, ran the attack set and three trials per criterion, and drafted the before-and-after results and remaining problems.
+- **What I changed:** I reviewed the README before approving the push. The results kept the original targets: five false accusations were removed, but criterion 3 became MISSED because its original boundary stayed at 0.65.
+
 ## Evaluation Status and Limitations
 
 The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Submission validation errors and detector failures are recorded as audit rejection entries.
@@ -1695,16 +1713,46 @@ remain; this threshold change does not address their underlying causes.
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+The after run still has 14 broken attacks. The threshold change reduced false
+accusations, but did not fix the weaknesses below.
 
+| Attack | What is still wrong | What I'd do next |
+|---|---|---|
+| EV01 | Typos make AI text look less predictable, leading to unsure. | Compare scores with and without spelling normalisation, checking that genuine informal writing is not unfairly penalised. |
+| EV02 | Choppy sentences lower the style score and produce unsure. | Rework how much sentence-length variation affects the style score. |
+| EV03 | A pasted quotation changes the style measurements enough to avoid an AI label. | Test quoted and unquoted sections separately rather than treating the whole passage as one style. |
+| EV04 | Unusual words help AI text stay below the AI cutoff. | Test a signal less dependent on word predictability and vocabulary variety. |
+| EV05 | Edited AI text receives a human label from both signals. | Add edited-AI examples to calibration and check whether a different signal can separate them. |
+| EV06 | A very long sentence beside a short one drives down the style score. | Reduce how strongly extreme sentence variation counts as human-like evidence. |
+| EV07 | Semicolon-linked text triggers the one-sentence style fallback. | Improve sentence splitting and stop treating missing style evidence as a neutral score that can support a confident label. |
+| EV08 | Very short text gets a weak style fallback and avoids an AI label. | Give a clear insufficient-text result when there is too little evidence for authorship scoring. |
+| EV09 | A conversational opening pulls the combined score into unsure. | Compare section-level scores so an opening cannot stand in for the whole passage. |
+| PI02 | The fake system-message input gets a human label, although its instructions are not executed. | Treat it as an evasion example when calibrating signals, while continuing to score its instructions as ordinary text. |
+| MF03 | Control-character text receives a human label. | Reject control characters that are not ordinary text whitespace before scoring. |
+| MF04 | Punctuation-only text receives a human label. | Check for meaningful text before running the signals, without restricting valid writing to English. |
+| MF05 | A long repeated character sequence receives an AI label. | Detect extreme character repetition and reject it before model scoring. |
+| MF06 | Emoji-only input receives an AI label. | Return an insufficient-text result instead of assigning an authorship label. |
 
+I stopped after the one threshold change so the before-and-after comparison
+would measure that change alone. The ideas above need separate runs to show
+whether they help without creating new false accusations.
+
+### Criteria still missed
+
+| Criterion | What I'd do next | Why I stopped here |
+|---|---|---|
+| 1. Human writing | Improve signal calibration so more genuine writing can reach the human band without increasing false accusations. | Raising the AI cutoff did not change the human cutoff or any scores; a further calibration change would need its own comparison. |
+| 2. Score separation | Improve the signals using a separate calibration set, then rerun the fixed human and AI examples. | Changing a label threshold cannot increase the measured score gap; changing the signals as well would mix two improvements. |
+| 3. Original label boundaries | Test a different improvement that reduces false accusations while keeping the original 0.65 boundary. | The chosen 0.70 cutoff deliberately conflicts with that target. I kept the original target and recorded MISSED instead of rewriting it to pass. |
 
 **The trade I'd make if this ran for real:**
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+I'd favour fewer false accusations and send uncertain cases for review, even
+if that lets more AI-written text avoid an AI label. Moderators would carry
+more review work and the site would accept more missed AI text, rather than
+making genuine writers bear the cost of a confident but wrong accusation.
 
+**Submission URL:** https://github.com/aanshika005/ProvenanceGuard
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
@@ -1733,8 +1781,8 @@ remain; this threshold change does not address their underlying causes.
        [x] Five criteria across three trials
        [x] A diagnosis for every miss and every broken attack — stage AND mechanism
        [x] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
+       [x] What's Still Broken, including the production trade
+       [x] At least four new commits
        [ ] The SAME repository URL as last unit
 
      Do not delete and recreate this repository.
