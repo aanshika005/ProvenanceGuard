@@ -13,8 +13,7 @@ Fill in `scenarios.py` first — that's where you say what each criterion needs
 run against it. A criterion about false positives needs your own writing. One
 about label coverage needs inputs across the score range.
 
-!! Three trials, and **your first signal runs a model, so identical input can
-score differently twice.** That's exactly why repeats matter here.
+Identical inputs should produce matching scores. Record all three trials.
 
 This does the sending and the recording. It does not decide whether a trial
 passed — that depends on the criterion you wrote, so the Verdict column comes
@@ -66,6 +65,80 @@ def describe(body):
     return json.dumps(body)[:120]
 
 
+def run_trial(scenario, url, timeout):
+    """Run submissions and the extra checks required by the five criteria."""
+    import requests
+    import scoring
+
+    results = []
+    for body in bodies_for(scenario):
+        result = {"sent": describe(body)}
+        try:
+            response = requests.post(f"{url}/submit", json=body, timeout=timeout)
+            payload = response.json()
+            result.update({
+                "status": response.status_code,
+                "guess": payload.get("guess"),
+                "confidence": payload.get("confidence"),
+                "model_score": payload.get("model_score"),
+                "style_score": payload.get("style_score"),
+                "label": payload.get("label"),
+                "response": payload,
+            })
+            if scenario.get("appeals"):
+                content_id = payload.get("content_id")
+                original = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+                original = [e for e in original if e.get("content_id") == content_id]
+                reasoning = "Please review this decision about my submission."
+                appeal = requests.post(f"{url}/appeal", json={
+                    "content_id": content_id, "reasoning": reasoning,
+                }, timeout=timeout)
+                result["appeal_status"] = appeal.status_code
+                result["appeal_response"] = appeal.json()
+                after = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+                after = [e for e in after if e.get("content_id") == content_id]
+                events = [e for e in after if e.get("event") == "appeal"]
+                result["original_preserved"] = bool(original) and all(e in after for e in original)
+                result["appeal_recorded"] = any(
+                    e.get("creator_id") == body["creator_id"]
+                    and e.get("reasoning") == reasoning
+                    and e.get("timestamp")
+                    and e.get("status") == "under_review" for e in events
+                )
+                result["audit_entries"] = after
+        except Exception as exc:  # noqa: BLE001
+            result.update({"status": None, "error": f"{type(exc).__name__}: {exc}"})
+        results.append(result)
+
+    if scenario.get("boundaries"):
+        for score in [0.0, 0.35, 0.350001, 0.649999, 0.65, 1.0]:
+            guess, label = scoring.score_to_label(score)
+            results.append({"score": score, "guess": guess, "label": label,
+                            "source": "scoring.py::score_to_label"})
+
+    if scenario.get("appeals"):
+        missing_id = "eval_nonexistent_content_id"
+        response = requests.post(f"{url}/appeal", json={
+            "content_id": missing_id, "reasoning": "Please review this missing item.",
+        }, timeout=timeout)
+        entries = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+        results.append({"missing_appeal_status": response.status_code,
+                        "response": response.json(),
+                        "no_under_review_event": not any(
+                            e.get("content_id") == missing_id
+                            and e.get("status") == "under_review" for e in entries)})
+
+    if scenario.get("bad_input"):
+        response = requests.get(f"{url}/health", timeout=timeout)
+        entries = requests.get(f"{url}/log", timeout=timeout).json()["entries"]
+        creators = {body["creator_id"] for body in bodies_for(scenario)}
+        results.append({"health_status": response.status_code, "response": response.json(),
+                        "no_classification_decisions": not any(
+                            e.get("creator_id") in creators and e.get("status") == "decided"
+                            for e in entries)})
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -112,25 +185,7 @@ def main():
 
         trials = []
         for trial in range(1, args.trials + 1):
-            results = []
-            for i, body in enumerate(bodies_for(scenario), 1):
-                preview = describe(body)
-                try:
-                    response = requests.post(f"{args.url}/submit", json=body,
-                                             timeout=args.timeout)
-                    payload = response.json() if response.content else {}
-                    results.append({
-                        "status": response.status_code,
-                        "guess": payload.get("guess"),
-                        "confidence": payload.get("confidence"),
-                        "model_score": payload.get("model_score"),
-                        "style_score": payload.get("style_score"),
-                        "label": payload.get("label"),
-                        "sent": preview,
-                    })
-                except Exception as exc:  # noqa: BLE001
-                    results.append({"status": None, "error": f"{type(exc).__name__}: {exc}",
-                                    "sent": preview})
+            results = run_trial(scenario, args.url, args.timeout)
 
             trials.append(results)
             guesses = [r.get("guess") or "—" for r in results]

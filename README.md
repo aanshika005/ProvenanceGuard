@@ -902,21 +902,360 @@ showing that this is not confined to one writing style.
 
 ## Run Log and Verdicts
 
-<!-- Your five criteria across three trials. `run_eval.py --label before`. -->
+```bash
+python run_eval.py --label before
+```
+
+All five scenarios ran three times without changing the service or inputs.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing | ≤1/10 AI and ≥5/10 human | 1/10 AI; 0/10 human | 1/10 AI; 0/10 human | 1/10 AI; 0/10 human | NOT VALIDATED* |
+| 2. Human–AI score separation | Mean AI score − mean human score ≥0.15 | 0.032675 | 0.032675 | 0.032675 | NOT VALIDATED* |
+| 3. Label coverage and boundaries | 3/3 labels; 12/12 valid labels; correct boundaries | 3/3; 12/12; 6/6 | 3/3; 12/12; 6/6 | 3/3; 12/12; 6/6 | MET |
+| 4. Appeals | 3/3 recorded, originals preserved; unknown ID rejected | 3/3; unknown ID 404 | 3/3; unknown ID 404 | 3/3; unknown ID 404 | MET |
+| 5. Invalid text | 6/6 JSON 400s; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+*I did not have ten paragraphs of my own writing, so I used AI-written samples
+in a conversational style. The first two rows show those sample results, but
+they do not validate the original human-writing criteria. Both sample groups
+for criterion 2 have ten paragraphs of 100–200 words on matching topics.
+Their mean scores were 0.537940 and 0.570615, a gap of 0.032675, below 0.15.
+Criterion 1 also fell short of the five-human-label target on these samples.
+
+Scores, labels, and check results matched across all three trials. Content IDs,
+timestamps, and the growing log count changed as expected.
+
+Full output: [three-trial run](results/run_2026-11-12_2226_before.md).
+
+### Real output from Run 1
+
+Produced by `run_eval.py::run_trial`, called by `run_eval.py::main`, using the
+inputs in `scenarios.py::SCENARIOS`. These are excerpts; the report contains
+all responses from all three trials. Submissions come from `app.py::submit`,
+appeals from `app.py::appeal`, and boundary checks from `scoring.py::score_to_label`.
+
+**1. Writing samples**
 
 ```json
+[
+  {
+    "sent": "I was nervous about calling the repair shop because I did not know the",
+    "status": 201,
+    "guess": "ai",
+    "confidence": 0.65755,
+    "model_score": 0.7585,
+    "style_score": 0.5566,
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "response": {
+      "confidence": 0.65755,
+      "content_id": "186a37eb-d823-4e88-8806-fbe8ecf60601",
+      "guess": "ai",
+      "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+      "model_score": 0.7585,
+      "status": "decided",
+      "style_score": 0.5566
+    }
+  }
+]
+```
 
+**2. Score separation**
+
+```json
+[
+  {
+    "sent": "I thought the library would be quiet on Tuesday, but somebody was dril",
+    "status": 201,
+    "guess": "unsure",
+    "confidence": 0.4732,
+    "model_score": 0.4842,
+    "style_score": 0.4622,
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "response": {
+      "confidence": 0.4732,
+      "content_id": "7df1edb7-49b6-480c-8273-350294a2ba68",
+      "guess": "unsure",
+      "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+      "model_score": 0.4842,
+      "status": "decided",
+      "style_score": 0.4622
+    }
+  },
+  {
+    "sent": "Libraries provide an important environment for focused study and indep",
+    "status": 201,
+    "guess": "unsure",
+    "confidence": 0.52525,
+    "model_score": 0.5126,
+    "style_score": 0.5379,
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "response": {
+      "confidence": 0.52525,
+      "content_id": "81a33f1d-2bac-44be-b6ce-520bd121993c",
+      "guess": "unsure",
+      "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+      "model_score": 0.5126,
+      "status": "decided",
+      "style_score": 0.5379
+    }
+  }
+]
+```
+
+**3. Label coverage and boundaries**
+
+```json
+[
+  {
+    "sent": "Yesterday I went to the library to finish my assignment. I spent most ",
+    "status": 201,
+    "guess": "ai",
+    "confidence": 0.7239,
+    "model_score": 0.8272,
+    "style_score": 0.6206,
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "response": {
+      "confidence": 0.7239,
+      "content_id": "cbf03278-0a64-4ace-bc96-a6ca9eb8e8c0",
+      "guess": "ai",
+      "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": 0.6206
+    }
+  },
+  {
+    "sent": "This report explores the real-life impact of some of these close elect",
+    "status": 201,
+    "guess": "unsure",
+    "confidence": 0.45355,
+    "model_score": 0.5955,
+    "style_score": 0.3116,
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "response": {
+      "confidence": 0.45355,
+      "content_id": "189a0885-cba8-475b-b411-6d8d0217c436",
+      "guess": "unsure",
+      "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+      "model_score": 0.5955,
+      "status": "decided",
+      "style_score": 0.3116
+    }
+  },
+  {
+    "sent": "By 6:43 a.m., the photocopier had swallowed page seventeen, somebody h",
+    "status": 201,
+    "guess": "human",
+    "confidence": 0.2082,
+    "model_score": 0.2758,
+    "style_score": 0.1406,
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "response": {
+      "confidence": 0.2082,
+      "content_id": "5c5d4799-a382-4f35-83e6-59b5e4817317",
+      "guess": "human",
+      "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+      "model_score": 0.2758,
+      "status": "decided",
+      "style_score": 0.1406
+    }
+  },
+  {
+    "score": 0.0,
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "source": "scoring.py::score_to_label"
+  },
+  {
+    "score": 0.35,
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "source": "scoring.py::score_to_label"
+  },
+  {
+    "score": 0.350001,
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "source": "scoring.py::score_to_label"
+  },
+  {
+    "score": 0.649999,
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "source": "scoring.py::score_to_label"
+  },
+  {
+    "score": 0.65,
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "source": "scoring.py::score_to_label"
+  },
+  {
+    "score": 1.0,
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "source": "scoring.py::score_to_label"
+  }
+]
+```
+
+**4. Appeals**
+
+```json
+[
+  {
+    "sent": "Yesterday I went to the library to finish my assignment. I spent most ",
+    "status": 201,
+    "guess": "ai",
+    "confidence": 0.7239,
+    "model_score": 0.8272,
+    "style_score": 0.6206,
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "response": {
+      "confidence": 0.7239,
+      "content_id": "a979530c-de22-42d5-9977-8a5b7a36c2e7",
+      "guess": "ai",
+      "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": 0.6206
+    },
+    "appeal_status": 200,
+    "appeal_response": {
+      "content_id": "a979530c-de22-42d5-9977-8a5b7a36c2e7",
+      "message": "Your appeal has been recorded.",
+      "status": "under_review"
+    },
+    "original_preserved": true,
+    "appeal_recorded": true,
+    "audit_entries": [
+      {
+        "combined_score": 0.7239,
+        "content_id": "a979530c-de22-42d5-9977-8a5b7a36c2e7",
+        "creator_id": "eval_appeal path_1",
+        "guess": "ai",
+        "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+        "model_score": 0.8272,
+        "status": "decided",
+        "style_score": 0.6206,
+        "timestamp": "2026-11-13T06:26:06+00:00"
+      },
+      {
+        "content_id": "a979530c-de22-42d5-9977-8a5b7a36c2e7",
+        "creator_id": "eval_appeal path_1",
+        "event": "appeal",
+        "reasoning": "Please review this decision about my submission.",
+        "status": "under_review",
+        "timestamp": "2026-11-13T06:26:06+00:00"
+      }
+    ]
+  },
+  {
+    "missing_appeal_status": 404,
+    "response": {
+      "error": "content_not_found",
+      "message": "No decision exists for this content ID."
+    },
+    "no_under_review_event": true
+  }
+]
+```
+
+**5. Invalid text**
+
+```json
+[
+  {
+    "sent": "{\"creator_id\": \"eval_missing\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "(empty text)",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": " \t\n ",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "{\"text\": null, \"creator_id\": \"eval_null\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "{\"text\": 42, \"creator_id\": \"eval_number\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must not exceed 20,000 characters."
+    }
+  },
+  {
+    "health_status": 200,
+    "response": {
+      "detector_loaded": true,
+      "detector_model": "gpt2",
+      "log_entries": 237,
+      "ok": true,
+      "rate_limiting": true
+    },
+    "no_classification_decisions": true
+  }
+]
 ```
 
 **Diagnoses**
