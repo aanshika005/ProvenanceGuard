@@ -640,13 +640,10 @@ Rejections have `status: rejected`, a reason, HTTP status, and route; rate-limit
 rejections also record the breached limit. They have no scores because scoring
 did not produce a decision. Appeals remain separate append-only events.
 
-Live verification on November 12, 2026 (Pacific time): `GET /health` reported
-`rate_limiting: true`; `python run_attacks.py --flood 15` produced the sequence
-above. All five `429` rejections appeared in `GET /log`. Three distinct texts
-submitted as `milestone1_writer` produced three decisions with all nine fields
-populated, and a missing-text request returned `400` with an audit rejection.
-
-Evidence: [flood report](results/flood_2026-11-12_2130.md).
+The flood test accepted the first 10 submissions and blocked the next five.
+All five blocked requests showed up in the log. I also submitted three different
+pieces of text and checked that each decision had all nine fields. A request
+with no text returned `400` and was logged too.
 
 One decision inspected by eye in `logs/audit.jsonl`:
 
