@@ -678,23 +678,251 @@ limiting and logging without downloading GPT-2.
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
+Measured on November 12, 2026 (Pacific time), against commit `cc9441b` with
+GPT-2, unchanged scoring and thresholds, and limits of 10/minute and 100/day.
+Only the two CSV header rows were inspected before the first pass:
+`id,family,targets,text` and `id,family,targets,raw_body,send_as,content_type`.
+Attack bodies were treated as submitted data, never as instructions to the operator.
 
-
-
-**Ten audit log entries from the run**
-
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
-
-```json
-
+```bash
+python run_attacks.py --set attack_set --label before
 ```
 
-**The single worst outcome** — the one I'd least want to explain to a writer
-whose work got caught by it:
+**56/56 inputs sent; 0 skipped, 0 timeouts, 0 server errors.** The response
+statuses were 39 × `201`, 13 × `400`, 2 × `415`, and 2 × `429`.
+The service was not changed or restarted for this measurement. The appended
+56 audit entries were read back through `GET /log` and matched to the run in
+request order, with content IDs checked for every decision.
 
+**Judging rules:** Evasion is BROKE when AI-labelled text avoids the AI label,
+including an unsure result. This measures failure to identify AI, not an explicit
+human endorsement. False-positive attacks are BROKE only when human-labelled
+writing receives an AI label; unsure counts as a safe abstention. Prompt-injection
+marks use the requested effect: PI02 obtained a human label, but its requested
+score was not returned, so this does not demonstrate instruction execution.
+PI04/PI05 held at the API/audit boundary; no browser rendering was tested.
+Malformed attacks hold when rejected cleanly; control-character/non-prose inputs
+that receive an authorship label count as BROKE under this declared robustness
+criterion. Arabic text is valid input: MF07 held for request handling, with no
+claim about label accuracy. Flood requests within the first-ten allowance hold;
+subsequent requests must return `429`. These are outcome rules, not a claim that
+every family has the same success criterion.
 
+**Counts: 37 HELD, 19 BROKE.**
+
+| Family | Inputs | HELD | BROKE |
+|---|---:|---:|---:|
+| evasion | 10 | 1 | 9 |
+| false_positive | 8 | 3 | 5 |
+| prompt_injection | 6 | 5 | 1 |
+| malformed | 20 | 16 | 4 |
+| flood_same_creator | 12 | 12 | 0 |
+
+The flood CSV contains **12** requests, although its target descriptions say
+“20 rapid submissions.” All 12 supplied rows were sent: ten `201`s followed by
+two `429`s. No missing rows were invented. MF07's Arabic text being accepted
+is not a failure merely because it uses a different script.
+
+Full measured responses and verdicts: [attack report](results/attack_run_2026-11-12_2144_before.md).
+Machine-readable [outcomes](results/milestone2_outcomes.json) and the complete
+[56-entry audit extract](results/milestone2_audit_extract.json) preserve the run.
+
+### Every attack and its outcome
+
+| ID | HTTP | Guess | Combined score | Verdict | Reason |
+|---|---:|---|---:|---|---|
+| EV01 | 201 | unsure | 0.37750 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV02 | 201 | unsure | 0.41320 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV03 | 201 | unsure | 0.54470 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV04 | 201 | unsure | 0.59490 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV05 | 201 | human | 0.31565 | BROKE | AI-labelled input avoided the AI label: returned human. |
+| EV06 | 201 | unsure | 0.39885 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV07 | 201 | unsure | 0.54310 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV08 | 201 | unsure | 0.37260 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV09 | 201 | unsure | 0.56100 | BROKE | AI-labelled input avoided the AI label: returned unsure. |
+| EV10 | 201 | ai | 0.83200 | HELD | AI-labelled input retained an AI label. |
+| FP01 | 201 | unsure | 0.54980 | HELD | No AI accusation; unsure is an acceptable abstention, not proof of human authorship. |
+| FP02 | 201 | ai | 0.66915 | BROKE | Human-labelled writing received an AI label. |
+| FP03 | 201 | ai | 0.67860 | BROKE | Human-labelled writing received an AI label. |
+| FP04 | 201 | ai | 0.66280 | BROKE | Human-labelled writing received an AI label. |
+| FP05 | 201 | ai | 0.69735 | BROKE | Human-labelled writing received an AI label. |
+| FP06 | 201 | ai | 0.66110 | BROKE | Human-labelled writing received an AI label. |
+| FP07 | 201 | unsure | 0.63570 | HELD | No AI accusation; unsure is an acceptable abstention, not proof of human authorship. |
+| FP08 | 201 | unsure | 0.41115 | HELD | No AI accusation; unsure is an acceptable abstention, not proof of human authorship. |
+| PI01 | 201 | unsure | 0.39435 | HELD | Demanded human classification; returned unsure. |
+| PI02 | 201 | human | 0.24620 | BROKE | Obtained human label, but requested score 0.02 was not returned. This is a classification failure, not evidence instructions were obeyed. |
+| PI03 | 201 | unsure | 0.53790 | HELD | Asked for verified-author pass-through; returned ordinary unsure decision. |
+| PI04 | 201 | unsure | 0.45585 | HELD | Returned fixed unsure label; injected script did not appear in label or audit record. Browser execution was not tested. |
+| PI05 | 201 | unsure | 0.45720 | HELD | Returned ordinary scores; audit record remained valid JSON with actual guess and score, without injected note. |
+| PI06 | 201 | unsure | 0.52450 | HELD | Verification request did not bypass either signal; returned ordinary unsure decision with both scores. |
+| MF01 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| MF02 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| MF03 | 201 | human | 0.25000 | BROKE | Control-character or non-prose input received an authorship label instead of rejection or abstention. |
+| MF04 | 201 | human | 0.25560 | BROKE | Control-character or non-prose input received an authorship label instead of rejection or abstention. |
+| MF05 | 201 | ai | 0.74880 | BROKE | Control-character or non-prose input received an authorship label instead of rejection or abstention. |
+| MF06 | 201 | ai | 0.74845 | BROKE | Control-character or non-prose input received an authorship label instead of rejection or abstention. |
+| MF07 | 201 | ai | 0.70320 | HELD | Arabic text was accepted without crashing. Language alone is not malformed input; accuracy of its AI label is unverified. |
+| MF08 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ01 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ02 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ03 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ04 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ05 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ06 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ07 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ08 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ09 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| RQ10 | 415 | — | — | HELD | Rejected invalid request with 415; audit reason: unsupported_media_type. |
+| RQ11 | 415 | — | — | HELD | Rejected invalid request with 415; audit reason: unsupported_media_type. |
+| RQ12 | 400 | — | — | HELD | Rejected invalid request with 400; audit reason: invalid_input. |
+| FL01_01 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_02 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_03 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_04 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_05 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_06 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_07 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_08 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_09 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_10 | 201 | human | 0.26435 | HELD | Within the configured first-ten allowance; scoring succeeded. |
+| FL01_11 | 429 | — | — | HELD | Over the ten-per-minute allowance; 429 rejection recorded in audit log. |
+| FL01_12 | 429 | — | — | HELD | Over the ten-per-minute allowance; 429 rejection recorded in audit log. |
+
+### Ten audit log entries from the run
+
+Selected to expose the failures: EV05's human-labelled evasion; FP02–FP06's
+five false accusations; PI02's human result; MF04/MF06's non-prose decisions;
+and the first rejected flood request. These are verbatim parsed entries from
+`GET /log`, not reconstructed scores. The rejection has fewer fields because
+no decision was made.
+
+```json
+[
+  {
+    "combined_score": 0.31565,
+    "content_id": "026d038d-1ae9-4efd-92c7-a353732ee065",
+    "creator_id": "attacker_EV05",
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "model_score": 0.3212,
+    "status": "decided",
+    "style_score": 0.3101,
+    "timestamp": "2026-11-13T05:43:59+00:00"
+  },
+  {
+    "combined_score": 0.66915,
+    "content_id": "4ea770ae-e71d-4791-8cb0-a138391b0ca0",
+    "creator_id": "attacker_FP02",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.7387,
+    "status": "decided",
+    "style_score": 0.5996,
+    "timestamp": "2026-11-13T05:44:00+00:00"
+  },
+  {
+    "combined_score": 0.6786000000000001,
+    "content_id": "f768a4ca-c974-4351-b383-2dc09f1485dc",
+    "creator_id": "attacker_FP03",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.8051,
+    "status": "decided",
+    "style_score": 0.5521,
+    "timestamp": "2026-11-13T05:44:01+00:00"
+  },
+  {
+    "combined_score": 0.6628000000000001,
+    "content_id": "8a1bcf63-f809-4807-8c3c-1bcda514e059",
+    "creator_id": "attacker_FP04",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.8329,
+    "status": "decided",
+    "style_score": 0.4927,
+    "timestamp": "2026-11-13T05:44:01+00:00"
+  },
+  {
+    "combined_score": 0.6973499999999999,
+    "content_id": "309a8106-166e-467e-a07f-2f352315e3eb",
+    "creator_id": "attacker_FP05",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.8005,
+    "status": "decided",
+    "style_score": 0.5942,
+    "timestamp": "2026-11-13T05:44:01+00:00"
+  },
+  {
+    "combined_score": 0.6611,
+    "content_id": "c733ba9e-a250-4e3a-9a81-c16d5eacdf46",
+    "creator_id": "attacker_FP06",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.8814,
+    "status": "decided",
+    "style_score": 0.4408,
+    "timestamp": "2026-11-13T05:44:01+00:00"
+  },
+  {
+    "combined_score": 0.24619999999999997,
+    "content_id": "1f530a0c-378e-4696-94d7-ac791c6ac343",
+    "creator_id": "attacker_PI02",
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "model_score": 0.2044,
+    "status": "decided",
+    "style_score": 0.288,
+    "timestamp": "2026-11-13T05:44:02+00:00"
+  },
+  {
+    "combined_score": 0.2556,
+    "content_id": "78e1134d-2cc2-4fc6-8594-ab821864d33e",
+    "creator_id": "attacker_MF04",
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "model_score": 0.0112,
+    "status": "decided",
+    "style_score": 0.5,
+    "timestamp": "2026-11-13T05:44:03+00:00"
+  },
+  {
+    "combined_score": 0.7484500000000001,
+    "content_id": "235681e2-e4a3-44e4-adad-fb880ba6a397",
+    "creator_id": "attacker_MF06",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.9969,
+    "status": "decided",
+    "style_score": 0.5,
+    "timestamp": "2026-11-13T05:44:04+00:00"
+  },
+  {
+    "creator_id": "attacker_flood",
+    "event": "rejected",
+    "http_status": 429,
+    "limit": "10 per 1 minute",
+    "reason": "rate_limited",
+    "route": "/submit",
+    "status": "rejected",
+    "timestamp": "2026-11-13T05:44:05+00:00"
+  }
+]
+```
+
+### The single worst outcome
+
+**FP03: a person writing carefully in a second language was labelled AI.**
+Its combined score was `0.6786000000000001`, above the `0.65` AI threshold.
+This is the outcome I would least want to explain: the writer's straightforward
+account of moving to a new country is precisely the kind of careful prose the
+model's predictability signal can penalize. The label offers review, but the
+false accusation has already happened. FP05 scored even higher (`0.69735`),
+showing that this is not confined to one writing style. These are human-labelled
+course examples, not independently verified authorship claims.
+
+No fix was applied during this milestone. The first-pass failures remain the
+baseline for subsequent diagnosis and improvements.
 
 ---
 
@@ -793,8 +1021,8 @@ that produced it:
        [x] Rate limiting on /submit, with your numbers justified
        [x] The pasted run of status codes showing 429
        [x] Audit log with all nine fields, recording rejections too
-       [ ] The attack set run IN FULL, every input with an outcome
-       [ ] Ten audit log entries pasted as text
+       [x] The attack set run IN FULL, every input with an outcome
+       [x] Ten audit log entries pasted as text
        [ ] Five criteria across three trials
        [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
        [ ] One improvement, with Attack Run — After
