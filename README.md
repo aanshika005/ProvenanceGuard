@@ -1308,7 +1308,7 @@ Scores below come from the saved attack run. A lower signal score means more hum
 - **Averaging often leads to unsure.** This helped avoid accusations on the ten supplied human passages, but missed the human-label target and let eight evasion inputs avoid an AI label. The same combining rule also cancelled much of criterion 2's style separation.
 - **Input validity is weaker than score validity.** The route rejects missing or oversized text, but accepts control characters, punctuation, repeated characters, and emoji. The style fallback of 0.5 then lets the model turn those inputs into authorship decisions.
 
-The original targets stay unchanged. They were measurable; missing them is not a reason to lower them. No fix was made in this milestone.
+The original targets stay unchanged. They were measurable; missing them is not a reason to lower them.
 
 ---
 
