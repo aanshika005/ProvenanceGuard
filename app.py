@@ -39,7 +39,7 @@ app = Flask(__name__)
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
 # Off until you turn it on. In unit 8, Milestone 1:
 #
-#   1. Set RATE_LIMITING_ENABLED = True in config.py (or AI201_RATE_LIMITS=1)
+#   1. Set RATE_LIMITING_ENABLED = True in config.py
 #   2. Choose your numbers there
 #   3. Uncomment the @limiter.limit(...) line on /submit below
 #
@@ -86,7 +86,7 @@ if config.RATE_LIMITING_ENABLED:
         if not isinstance(payload, dict):
             return get_remote_address()
         creator = payload.get("creator_id")
-        return creator if isinstance(creator, str) and creator.strip() else get_remote_address()
+        return creator.strip() if isinstance(creator, str) and creator.strip() else get_remote_address()
 
     limiter = Limiter(
         key_func=rate_limit_key,
@@ -105,10 +105,13 @@ if config.RATE_LIMITING_ENABLED:
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             payload = {}
+        creator = payload.get("creator_id")
         audit.log_rejection(
-            creator_id=payload.get("creator_id", "unknown"),
+            creator_id=creator.strip() if isinstance(creator, str) and creator.strip() else "unknown",
             reason="rate_limited",
             limit=str(exc.description),
+            http_status=429,
+            route=request.path,
         )
         return jsonify({
             "error": "rate_limited",
@@ -153,46 +156,45 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
+    def reject(reason, message, status_code, creator_id="unknown"):
+        audit.log_rejection(
+            creator_id=creator_id,
+            reason=reason,
+            http_status=status_code,
+            message=message,
+            route="/submit",
+        )
+        return jsonify({"error": reason, "message": message}), status_code
+
     if not request.is_json:
-        return jsonify({
-            "error": "unsupported_media_type",
-            "message": "Send the request as application/json.",
-        }), 415
+        return reject("unsupported_media_type", "Send the request as application/json.", 415)
 
     payload = request.get_json(silent=True)
 
     if not isinstance(payload, dict):
-        return jsonify({
-            "error": "invalid_input",
-            "message": "The request body must be a valid JSON object.",
-        }), 400
+        return reject("invalid_input", "The request body must be a valid JSON object.", 400)
 
     text = payload.get("text")
     creator_id = payload.get("creator_id")
+    audit_creator = (
+        creator_id.strip() if isinstance(creator_id, str) and creator_id.strip()
+        else "unknown"
+    )
 
     if not isinstance(text, str) or not text.strip():
-        return jsonify({
-            "error": "invalid_input",
-            "message": "The text field must be a nonempty string.",
-        }), 400
+        return reject("invalid_input", "The text field must be a nonempty string.", 400, audit_creator)
 
     if len(text) > 20000:
-        return jsonify({
-            "error": "invalid_input",
-            "message": "The text field must not exceed 20,000 characters.",
-        }), 400
+        return reject("invalid_input", "The text field must not exceed 20,000 characters.", 400, audit_creator)
 
     if (
         not isinstance(creator_id, str)
         or not creator_id.strip()
         or len(creator_id) > 100
     ):
-        return jsonify({
-            "error": "invalid_input",
-            "message": "creator_id must be a nonempty string of at most 100 characters.",
-        }), 400
+        return reject("invalid_input", "creator_id must be a nonempty string of at most 100 characters.", 400, audit_creator)
 
     text = text.strip()
     creator_id = creator_id.strip()
@@ -200,15 +202,9 @@ def submit():
     try:
         model_score = detector.model_signal(text)
     except detector.DetectorUnavailable:
-        return jsonify({
-            "error": "detector_unavailable",
-            "message": "The model is unavailable. Please try again later.",
-        }), 503
+        return reject("detector_unavailable", "The model is unavailable. Please try again later.", 503, audit_creator)
     except ValueError:
-        return jsonify({
-            "error": "invalid_input",
-            "message": "The text could not be scored. Please provide several sentences.",
-        }), 400
+        return reject("invalid_input", "The text could not be scored. Please provide several sentences.", 400, audit_creator)
 
     style_score = stylometry.style_signal(text)
     combined_score = scoring.combine_signals(model_score, style_score)

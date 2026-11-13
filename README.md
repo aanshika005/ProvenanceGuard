@@ -599,7 +599,7 @@ The log preserves the original decision and appends an appeal event with the sam
 
 ## Evaluation Status and Limitations
 
-The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Input validation errors currently return without an audit rejection entry.
+The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Submission validation errors and detector failures are recorded as audit rejection entries.
 
 The scores are sensitive to wording and textual shape. The AI-generated narrative receiving a human label demonstrates that these signals cannot establish provenance. The service does not authenticate creator IDs or appeal callers, and review is recorded rather than automatically resolved.
 
@@ -611,25 +611,68 @@ The scores are sensitive to wording and textual shape. The AI-generated narrativ
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 10 per minute, 100 per day, enabled by default in `config.py`.
 
-**Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
+**Why those numbers and not others:** A writer can submit several revisions in
+one sitting and return throughout the day. Ten per minute permits that burst;
+100 per day prevents a script from collecting a thousand threshold probes from
+one creator in a day. Rejected attempts also consume the allowance.
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**What a caller counts as:** A trimmed `creator_id`, falling back to the remote
+address for missing or invalid IDs. Different creators have separate allowances.
+Creator IDs are self-reported: rotating IDs can bypass this policy. The in-memory
+backend resets on restart and does not share counts between service processes.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
-
+```text
+201 201 201 201 201 201 201 201 201 201 429 429 429 429 429
 ```
 
+Successful submissions return `201 Created` in this service.
+
+### Milestone 1 audit verification
+
+Every decision records `timestamp`, `content_id`, `creator_id`, `guess`,
+`model_score`, `style_score`, `combined_score`, `label`, and `status`. The stored
+scores, label, and identifiers let a reader reconstruct the reported decision.
+Rejections have `status: rejected`, a reason, HTTP status, and route; rate-limit
+rejections also record the breached limit. They have no scores because scoring
+did not produce a decision. Appeals remain separate append-only events.
+
+Live verification on November 12, 2026 (Pacific time): `GET /health` reported
+`rate_limiting: true`; `python run_attacks.py --flood 15` produced the sequence
+above. All five `429` rejections appeared in `GET /log`. Three distinct texts
+submitted as `milestone1_writer` produced three decisions with all nine fields
+populated, and a missing-text request returned `400` with an audit rejection.
+
+Evidence: [flood report](results/flood_2026-11-12_2130.md) and
+[audit extract read back through GET /log](results/milestone1_audit_extract.json).
+The live requests used the configured GPT-2 detector, without mocked scores.
+
+One decision inspected by eye in `logs/audit.jsonl`:
+
+```json
+{
+  "combined_score": 0.56335,
+  "content_id": "d281157c-f125-4868-b30c-612d747a1004",
+  "creator_id": "milestone1_writer",
+  "guess": "unsure",
+  "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+  "model_score": 0.6867,
+  "status": "decided",
+  "style_score": 0.44,
+  "timestamp": "2026-11-13T05:30:51+00:00"
+}
 ```
+
+The model score `0.6867` and style score `0.44` combine with the configured equal
+weights to `0.56335`, inside the unsure band (0.35–0.65). The entry records that
+result and its full label alongside the creator, content ID, time, and status.
+
+Run regression checks with `python -m unittest -v test_milestone1.py`. These use
+controlled detector scores and an isolated temporary audit file; they verify
+limiting and logging without downloading GPT-2.
 
 ---
 
@@ -747,9 +790,9 @@ that produced it:
 
      SUBMISSION CHECKLIST — unit 8
 
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
+       [x] Rate limiting on /submit, with your numbers justified
+       [x] The pasted run of status codes showing 429
+       [x] Audit log with all nine fields, recording rejections too
        [ ] The attack set run IN FULL, every input with an outcome
        [ ] Ten audit log entries pasted as text
        [ ] Five criteria across three trials
