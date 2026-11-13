@@ -126,7 +126,7 @@ combined_score = 0.5 * 0.85 + 0.5 * 0.55
                = 0.70
 ```
 
-Because the combined score exceeds the configured AI threshold of **0.65**, the system incorrectly classifies the student's work as AI.
+With the original AI threshold of **0.65**, this hypothetical score would incorrectly classify the student's work as AI. The current threshold is **0.70**, introduced in Milestone 5.
 
 The proposed label says:
 
@@ -138,7 +138,7 @@ This scenario guides my threshold choices. I would prioritize reducing false acc
 
 ### Endpoint Contracts
 
-These contracts describe the implemented success and validation responses. Rate limiting is reserved for Unit 8 and is currently inactive.
+These contracts describe the implemented success and validation responses. Rate limiting is active on `/submit`: 10 submissions per minute and 100 per day per creator, with the caller’s address used when no usable creator ID is provided.
 
 #### POST /submit
 
@@ -192,7 +192,7 @@ The following values illustrate the hypothetical false positive:
 |---|---|---|
 | 400 | `invalid_input` | Malformed JSON, a non-object body, or missing, empty, incorrectly typed, or oversized fields. |
 | 415 | `unsupported_media_type` | The request is not sent as JSON. |
-| 429 | `rate_limited` | The submission limit has been exceeded, once limiting is enabled. |
+| 429 | `rate_limited` | The active submission limit has been exceeded. |
 | 503 | `detector_unavailable` | The model cannot produce a score. |
 
 All errors return a JSON object containing `error` and `message`:
@@ -258,6 +258,8 @@ An appeal does not automatically reverse the decision. This initial design does 
 
 ## Label Variants
 
+These are the current ranges after the Milestone 5 change. Earlier examples and before-run results used an AI threshold of 0.65.
+
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
 | high-confidence human | 0.00 ≤ score ≤ 0.35 | This text appears likely to have been written by a person. This assessment is not proof of authorship. |
@@ -292,6 +294,8 @@ These scores measure predictability and do not establish authorship.
 
 ## Sample Run
 
+These samples were recorded before Milestone 5, when the AI threshold was 0.65. They are kept as the original results; the current AI threshold is 0.70.
+
 ### AI Label: Submission and Appeal
 
 #### Submission
@@ -324,7 +328,7 @@ The combined score is the average of the two signals:
 0.5 × 0.8272 + 0.5 × 0.6206 = 0.7239
 ```
 
-This exceeds the AI threshold of 0.65, producing the `ai` guess. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship. This test paragraph was supplied by an AI assistant and is not evidence of a false positive on human writing.
+This exceeds the then-current AI threshold of 0.65, producing the `ai` guess. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship. This test paragraph was supplied by an AI assistant and is not evidence of a false positive on human writing.
 
 #### Appeal
 
@@ -420,7 +424,7 @@ The combined score was calculated using equal weights:
 0.5 × 0.5955 + 0.5 × 0.3116 = 0.45355
 ```
 
-The score falls within the unsure range: 0.35 < score < 0.65. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship.
+The score falls within the then-current unsure range: 0.35 < score < 0.65. The `confidence` field contains the combined AI-like score, not a calibrated probability of authorship.
 
 #### Appeal
 
@@ -599,7 +603,9 @@ The log preserves the original decision and appends an appeal event with the sam
 
 ## Evaluation Status and Limitations
 
-The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Submission validation errors and detector failures are recorded as audit rejection entries.
+The five acceptance targets and reasons are in [criteria.md](criteria.md). All five criteria were run three times before and after the threshold change. Before the change, criteria 1 and 2 were MISSED and criteria 3–5 were MET. After the change, criteria 1–3 were MISSED and criteria 4–5 were MET. The run logs and JSON output below record those results.
+
+Original decision and appeal events use different audit schemas. Submission validation errors and detector failures are recorded as audit rejection entries.
 
 The scores are sensitive to wording and textual shape. The AI-generated narrative receiving a human label demonstrates that these signals cannot establish provenance. The service does not authenticate creator IDs or appeal callers, and review is recorded rather than automatically resolved.
 
@@ -662,7 +668,7 @@ One decision inspected by eye in `logs/audit.jsonl`:
 ```
 
 The model score `0.6867` and style score `0.44` combine with the configured equal
-weights to `0.56335`, inside the unsure band (0.35–0.65). The entry records that
+weights to `0.56335`, inside the then-current unsure band (0.35–0.65). The entry records that
 result and its full label alongside the creator, content ID, time, and status.
 
 
