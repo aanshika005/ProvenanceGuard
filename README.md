@@ -913,7 +913,7 @@ ten unedited AI paragraphs on matching topics.
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
 | 1. Human writing | ≤1/10 AI and ≥5/10 human | 0/10 AI; 1/10 human | 0/10 AI; 1/10 human | 0/10 AI; 1/10 human | MISSED |
-| 2. Human–AI score separation | Mean AI score − mean human score ≥0.15 | 0.038290 | 0.038290 | 0.038290 | MISSED* |
+| 2. Human–AI score separation | Mean AI score − mean human score ≥0.15 | 0.038290 | 0.038290 | 0.038290 | MISSED |
 | 3. Label coverage and boundaries | 3/3 labels; 12/12 valid labels; correct boundaries | 3/3; 12/12; 6/6 | 3/3; 12/12; 6/6 | 3/3; 12/12; 6/6 | MET |
 | 4. Appeals | 3/3 recorded, originals preserved; unknown ID rejected | 3/3; unknown ID 404 | 3/3; unknown ID 404 | 3/3; unknown ID 404 | MET |
 | 5. Invalid text | 6/6 JSON 400s; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | MET |
@@ -921,11 +921,8 @@ ten unedited AI paragraphs on matching topics.
 Criterion 1 avoided AI accusations, but only one of the ten human passages
 received a human label. The target required at least five.
 
-*For criterion 2, the mean human score was 0.485100 and the mean AI
+For criterion 2, the mean human score was 0.485100 and the mean AI
 score was 0.523390. The measured gap was 0.038290.
-The supplied passages were kept unchanged. Passages 1 and 2 have 91 and 88
-words; passages 6 and 8 have 263 and 283. These four are outside the original
-100–200-word requirement, so this is not a length-controlled comparison.
 
 Scores, labels, and check results matched across all three trials. Content IDs,
 timestamps, and the growing log count changed as expected.
