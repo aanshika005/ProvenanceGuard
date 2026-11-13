@@ -261,8 +261,8 @@ An appeal does not automatically reverse the decision. This initial design does 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
 | high-confidence human | 0.00 ≤ score ≤ 0.35 | This text appears likely to have been written by a person. This assessment is not proof of authorship. |
-| unsure | 0.35 < score < 0.65 | We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use. |
-| high-confidence AI | 0.65 ≤ score ≤ 1.00 | This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review. |
+| unsure | 0.35 < score < 0.70 | We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use. |
+| high-confidence AI | 0.70 ≤ score ≤ 1.00 | This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review. |
 
 **Why I worded the "unsure" one this way:**
 
@@ -1314,22 +1314,382 @@ The original targets stay unchanged. They were measurable; missing them is not a
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** Raised `AI_THRESHOLD` in `config.py` from 0.65 to 0.70.
+The human cutoff stays at 0.35. Scores from 0.65 up to, but not including, 0.70
+now receive `unsure` instead of `ai`. This is the only service change.
 
-**Which diagnosis pointed at it:**
+**Which diagnosis pointed at it:** FP02–FP06 were genuine-human examples with
+combined scores between 0.66110 and 0.69735. Their predictable wording pushed
+them just over the old AI cutoff. Raising that cutoff avoids those accusations.
+
+```bash
+python run_attacks.py --set attack_set --label after
+python run_eval.py --label after
+```
+
+Both commands used the same inputs as before. All 56 attacks ran, followed by
+all five criteria three times. There were no skipped inputs, timeouts, or
+server errors. Scores stayed the same; only labels in the changed band moved.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+| Result | Before | After |
+|---|---:|---:|
+| HELD | 37/56 | 42/56 |
+| BROKE | 19/56 | 14/56 |
+| Human examples wrongly labelled AI | 5/8 | 0/8 |
+| Evasion attacks that avoided an AI label | 9/10 | 9/10 |
+| Flood rejections | 2/12 | 2/12 |
 
+[Before attack report](results/attack_run_2026-11-12_2144_before.md) ·
+[After attack report](results/attack_run_2026-11-12_2301_after.md)
 
+### Every attack: before and after
 
-**Did it help, and how do I know:**
+| ID | Before HTTP | Before guess | Before score | Verdict | After HTTP | After guess | After score | Verdict |
+|---|---:|---|---:|---|---:|---|---:|---|
+| EV01 | 201 | unsure | 0.37750 | BROKE | 201 | unsure | 0.37750 | BROKE |
+| EV02 | 201 | unsure | 0.41320 | BROKE | 201 | unsure | 0.41320 | BROKE |
+| EV03 | 201 | unsure | 0.54470 | BROKE | 201 | unsure | 0.54470 | BROKE |
+| EV04 | 201 | unsure | 0.59490 | BROKE | 201 | unsure | 0.59490 | BROKE |
+| EV05 | 201 | human | 0.31565 | BROKE | 201 | human | 0.31565 | BROKE |
+| EV06 | 201 | unsure | 0.39885 | BROKE | 201 | unsure | 0.39885 | BROKE |
+| EV07 | 201 | unsure | 0.54310 | BROKE | 201 | unsure | 0.54310 | BROKE |
+| EV08 | 201 | unsure | 0.37260 | BROKE | 201 | unsure | 0.37260 | BROKE |
+| EV09 | 201 | unsure | 0.56100 | BROKE | 201 | unsure | 0.56100 | BROKE |
+| EV10 | 201 | ai | 0.83200 | HELD | 201 | ai | 0.83200 | HELD |
+| FP01 | 201 | unsure | 0.54980 | HELD | 201 | unsure | 0.54980 | HELD |
+| FP02 | 201 | ai | 0.66915 | BROKE | 201 | unsure | 0.66915 | HELD |
+| FP03 | 201 | ai | 0.67860 | BROKE | 201 | unsure | 0.67860 | HELD |
+| FP04 | 201 | ai | 0.66280 | BROKE | 201 | unsure | 0.66280 | HELD |
+| FP05 | 201 | ai | 0.69735 | BROKE | 201 | unsure | 0.69735 | HELD |
+| FP06 | 201 | ai | 0.66110 | BROKE | 201 | unsure | 0.66110 | HELD |
+| FP07 | 201 | unsure | 0.63570 | HELD | 201 | unsure | 0.63570 | HELD |
+| FP08 | 201 | unsure | 0.41115 | HELD | 201 | unsure | 0.41115 | HELD |
+| PI01 | 201 | unsure | 0.39435 | HELD | 201 | unsure | 0.39435 | HELD |
+| PI02 | 201 | human | 0.24620 | BROKE | 201 | human | 0.24620 | BROKE |
+| PI03 | 201 | unsure | 0.53790 | HELD | 201 | unsure | 0.53790 | HELD |
+| PI04 | 201 | unsure | 0.45585 | HELD | 201 | unsure | 0.45585 | HELD |
+| PI05 | 201 | unsure | 0.45720 | HELD | 201 | unsure | 0.45720 | HELD |
+| PI06 | 201 | unsure | 0.52450 | HELD | 201 | unsure | 0.52450 | HELD |
+| MF01 | 400 | — | — | HELD | 400 | — | — | HELD |
+| MF02 | 400 | — | — | HELD | 400 | — | — | HELD |
+| MF03 | 201 | human | 0.25000 | BROKE | 201 | human | 0.25000 | BROKE |
+| MF04 | 201 | human | 0.25560 | BROKE | 201 | human | 0.25560 | BROKE |
+| MF05 | 201 | ai | 0.74880 | BROKE | 201 | ai | 0.74880 | BROKE |
+| MF06 | 201 | ai | 0.74845 | BROKE | 201 | ai | 0.74845 | BROKE |
+| MF07 | 201 | ai | 0.70320 | HELD | 201 | ai | 0.70320 | HELD |
+| MF08 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ01 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ02 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ03 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ04 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ05 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ06 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ07 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ08 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ09 | 400 | — | — | HELD | 400 | — | — | HELD |
+| RQ10 | 415 | — | — | HELD | 415 | — | — | HELD |
+| RQ11 | 415 | — | — | HELD | 415 | — | — | HELD |
+| RQ12 | 400 | — | — | HELD | 400 | — | — | HELD |
+| FL01_01 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_02 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_03 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_04 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_05 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_06 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_07 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_08 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_09 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_10 | 201 | human | 0.26435 | HELD | 201 | human | 0.26435 | HELD |
+| FL01_11 | 429 | — | — | HELD | 429 | — | — | HELD |
+| FL01_12 | 429 | — | — | HELD | 429 | — | — | HELD |
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+### Five criteria: before and after
 
+Each result below was the same in Run 1, Run 2, and Run 3.
 
+| Criterion | Original target | Before, each run | Verdict | After, each run | Verdict |
+|---|---|---|---|---|---|
+| 1. Human writing | ≤1/10 AI and ≥5/10 human | 0 AI; 1 human | MISSED | 0 AI; 1 human | MISSED |
+| 2. Score separation | Mean gap ≥0.15 | 0.038290 | MISSED | 0.038290 | MISSED |
+| 3. Coverage and boundaries | 3/3 labels; 12/12 valid labels; 6/6 original boundaries | 3/3; 12/12; 6/6 | MET | 3/3; 12/12; 5/6 | MISSED |
+| 4. Appeals | 3/3 recorded, originals preserved; unknown ID 404 | 3/3; unknown ID 404 | MET | 3/3; unknown ID 404 | MET |
+| 5. Invalid text | 6/6 JSON 400s; no decisions; health 200 | 6/6; no decisions; health 200 | MET | 6/6; no decisions; health 200 | MET |
+
+### After: three-trial run log
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Human writing | ≤1/10 AI and ≥5/10 human | 0/10 AI; 1/10 human | 0/10 AI; 1/10 human | 0/10 AI; 1/10 human | MISSED |
+| 2. Score separation | Mean gap ≥0.15 | 0.038290 | 0.038290 | 0.038290 | MISSED |
+| 3. Label coverage and original boundaries | 3/3 labels; 12/12 valid labels; 6/6 original boundary checks | 3/3; 12/12; 5/6 | 3/3; 12/12; 5/6 | 3/3; 12/12; 5/6 | MISSED |
+| 4. Appeals | 3/3 recorded, originals preserved; unknown ID 404 | 3/3; unknown ID 404 | 3/3; unknown ID 404 | 3/3; unknown ID 404 | MET |
+| 5. Invalid text | 6/6 JSON 400s; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | 6/6; no decisions; health 200 | MET |
+
+The original targets were not lowered. Criterion 3 is now MISSED because its
+original rule says a score of 0.65 must return `ai`; it now returns `unsure`.
+The stage is label mapping, and the mechanism is the deliberately raised AI
+cutoff. All three labels are still reachable. Criteria 1 and 2 still miss for
+the reasons diagnosed above: too few human labels and too little score separation.
+Appeals and invalid-input handling continue to meet their targets in every trial.
+
+[Before criteria report](results/run_2026-11-12_2241_before.md) ·
+[After criteria report](results/run_2026-11-12_2301_after.md)
+
+### Real output from After Run 1
+
+Produced by `run_eval.py::run_trial`, called by `run_eval.py::main`, using
+`scenarios.py::SCENARIOS`. These are actual response excerpts; the after report
+contains all three trials. Submissions come from `app.py::submit`, appeals from
+`app.py::appeal`, and boundary checks from `scoring.py::score_to_label`.
+
+**1. Human writing**
+
+```json
+{
+  "confidence": 0.34595,
+  "content_id": "44618017-009f-4c96-a57b-333b77d24e40",
+  "guess": "human",
+  "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+  "model_score": 0.3005,
+  "status": "decided",
+  "style_score": 0.3914
+}
+```
+
+**2. Score separation**
+
+```json
+[
+  {
+    "confidence": 0.56965,
+    "content_id": "dca74ece-7042-4edc-b375-bfc212355870",
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "model_score": 0.6329,
+    "status": "decided",
+    "style_score": 0.5064
+  },
+  {
+    "confidence": 0.611,
+    "content_id": "05e22ff8-f7f0-4f42-aa67-e223881bbada",
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "model_score": 0.6797,
+    "status": "decided",
+    "style_score": 0.5423
+  }
+]
+```
+
+**3. Label coverage and changed boundary**
+
+```json
+[
+  {
+    "confidence": 0.7239,
+    "content_id": "93aa8f4c-e3f5-42f3-853f-aaf266b6f035",
+    "guess": "ai",
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "model_score": 0.8272,
+    "status": "decided",
+    "style_score": 0.6206
+  },
+  {
+    "confidence": 0.45355,
+    "content_id": "e79efdc7-a000-4308-8921-fe2de0c98e4a",
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "model_score": 0.5955,
+    "status": "decided",
+    "style_score": 0.3116
+  },
+  {
+    "confidence": 0.2082,
+    "content_id": "acce29b1-c166-4910-84f1-9cc0a12ba198",
+    "guess": "human",
+    "label": "This text appears likely to have been written by a person. This assessment is not proof of authorship.",
+    "model_score": 0.2758,
+    "status": "decided",
+    "style_score": 0.1406
+  },
+  {
+    "score": 0.65,
+    "guess": "unsure",
+    "label": "We cannot reliably determine how this text was written. This result should not be treated as an accusation of AI use.",
+    "source": "scoring.py::score_to_label"
+  }
+]
+```
+
+**4. Appeals**
+
+```json
+[
+  {
+    "sent": "Yesterday I went to the library to finish my assignment. I spent most ",
+    "status": 201,
+    "guess": "ai",
+    "confidence": 0.7239,
+    "model_score": 0.8272,
+    "style_score": 0.6206,
+    "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+    "response": {
+      "confidence": 0.7239,
+      "content_id": "95e79114-b0ab-4137-9174-1ddc61e0fc64",
+      "guess": "ai",
+      "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+      "model_score": 0.8272,
+      "status": "decided",
+      "style_score": 0.6206
+    },
+    "appeal_status": 200,
+    "appeal_response": {
+      "content_id": "95e79114-b0ab-4137-9174-1ddc61e0fc64",
+      "message": "Your appeal has been recorded.",
+      "status": "under_review"
+    },
+    "original_preserved": true,
+    "appeal_recorded": true,
+    "audit_entries": [
+      {
+        "combined_score": 0.7239,
+        "content_id": "95e79114-b0ab-4137-9174-1ddc61e0fc64",
+        "creator_id": "eval_appeal path_1",
+        "guess": "ai",
+        "label": "This text has patterns our system associates with AI-generated writing. This assessment can be wrong and does not establish who wrote it. You can request a review.",
+        "model_score": 0.8272,
+        "status": "decided",
+        "style_score": 0.6206,
+        "timestamp": "2026-11-13T07:01:55+00:00"
+      },
+      {
+        "content_id": "95e79114-b0ab-4137-9174-1ddc61e0fc64",
+        "creator_id": "eval_appeal path_1",
+        "event": "appeal",
+        "reasoning": "Please review this decision about my submission.",
+        "status": "under_review",
+        "timestamp": "2026-11-13T07:01:55+00:00"
+      }
+    ]
+  },
+  {
+    "missing_appeal_status": 404,
+    "response": {
+      "error": "content_not_found",
+      "message": "No decision exists for this content ID."
+    },
+    "no_under_review_event": true
+  }
+]
+```
+
+**5. Invalid text**
+
+```json
+[
+  {
+    "sent": "{\"creator_id\": \"eval_missing\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "(empty text)",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": " \t\n ",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "{\"text\": null, \"creator_id\": \"eval_null\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "{\"text\": 42, \"creator_id\": \"eval_number\"}",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must be a nonempty string."
+    }
+  },
+  {
+    "sent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "status": 400,
+    "guess": null,
+    "confidence": null,
+    "model_score": null,
+    "style_score": null,
+    "label": null,
+    "response": {
+      "error": "invalid_input",
+      "message": "The text field must not exceed 20,000 characters."
+    }
+  },
+  {
+    "health_status": 200,
+    "response": {
+      "detector_loaded": true,
+      "detector_model": "gpt2",
+      "log_entries": 617,
+      "ok": true,
+      "rate_limiting": true
+    },
+    "no_classification_decisions": true
+  }
+]
+```
+
+**Did it help, and how do I know:** Yes: it removed all five false AI
+accusations in the attack set, but did not improve evasion detection, human-label
+coverage, or score separation, and it missed the original 0.65 boundary target.
+
+The five affected human examples now receive unsure, not a confident human
+label. No extra evasion failure appeared in this set, but AI text scoring from
+0.65 to below 0.70 would now avoid an AI label too. That is the cost of widening
+the unsure band. The nine evasion failures, PI02, and four non-prose failures
+remain; this threshold change does not address their underlying causes.
 
 ---
 
@@ -1370,9 +1730,9 @@ The original targets stay unchanged. They were measurable; missing them is not a
        [x] Audit log with all nine fields, recording rejections too
        [x] The attack set run IN FULL, every input with an outcome
        [x] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
+       [x] Five criteria across three trials
        [x] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
+       [x] One improvement, with Attack Run — After
        [ ] What's Still Broken, including the production trade
        [ ] At least four new commits
        [ ] The SAME repository URL as last unit
