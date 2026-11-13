@@ -1261,21 +1261,54 @@ from `app.py::appeal`, and boundaries from `scoring.py::score_to_label`.
 
 **Diagnoses**
 
-<!-- For each miss AND each broken attack: the stage and the mechanism.
+### How I decided each verdict
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+1. **Human writing — MISSED.** All three trials had 0/10 AI labels, which met the false-positive limit, but only 1/10 human labels, below the required five. The other nine were unsure.
+2. **Score separation — MISSED.** The mean AI score exceeded the mean human score by 0.038290 in every trial. The target was at least 0.15.
+3. **Label coverage — MET.** Every trial reached all three guesses, all 12 submissions had nonempty labels without placeholders, and all six boundary checks matched the original rules.
+4. **Appeals — MET.** All three appeals in every trial returned 200 with the correct content ID and `under_review`, appended the required event, and preserved the original decision. The unknown ID returned 404 without creating an under-review event.
+5. **Invalid text — MET.** All six cases returned JSON 400 responses with `invalid_input` and a message in every trial. None created a decision, and `/health` still returned 200.
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+### Why the two criteria missed
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+**Criterion 1 — combining rule and label mapping.** The equal-weight average left nine human passages between 0.35 and 0.65, so they received `unsure`. For example, passage 2 had a model score of 0.4919 and a style score of 0.2779. Their average was 0.3849, above the human cutoff of 0.35. The mapping followed its rules, but the combined scores did not identify enough human passages to meet the target. Avoiding false accusations alone was not enough to pass this criterion.
 
+**Criterion 2 — signal one, signal two, and the combining rule.** The mean model score was 0.49939 for the human set and 0.47444 for the AI set: the model ranked these groups in the wrong direction. GPT-2 predictability is a proxy for authorship, so AI-written wording can still look surprising to it. The style signal separated the groups more usefully, with means of 0.47081 for human text and 0.57234 for AI text. However, the equal-weight average partly cancelled that separation: `0.5 × (0.47444 − 0.49939) + 0.5 × (0.57234 − 0.47081) = 0.03829`. That explains the small combined gap. These results describe this sample set.
 
+### Why each broken attack broke
+
+Scores below come from the saved attack run. A lower signal score means more human-like patterns. Evasion marked BROKE includes unsure results because the AI label was avoided.
+
+| Attack | Stage | Mechanism and recorded evidence |
+|---|---|---|
+| EV01 | Signal one; combining rule | Misspellings make the wording less predictable to GPT-2. The model score was only 0.1635 despite a style score of 0.5915; their average, 0.37750, produced unsure. |
+| EV02 | Signal two; combining rule | Broken-up sentences produced high sentence-length spread (0.849). The style rule treats that variation as human-like, giving 0.2321; averaging with the model's 0.5943 produced 0.41320, unsure. |
+| EV03 | Signal two; combining rule | The pasted quotation changed sentence shape and word variety, which the style rule measures without understanding the quotation. Its 0.4232 pulled the model's 0.6662 down to 0.54470, unsure. |
+| EV04 | Signal one and signal two; label mapping | Unusual words are not evidence of human authorship, but predictability and vocabulary variety are what these signals measure. Scores of 0.6114 and 0.5784 averaged to 0.59490, below the AI cutoff, so the result was unsure. |
+| EV05 | Signal one and signal two | The edited AI passage had both a low predictability score (0.3212) and a low style score (0.3101). Surface editing can resemble human writing to both signals; their average of 0.31565 received a human label. |
+| EV06 | Signal two; combining rule | A very long sentence beside a short one pushed sentence-length spread above 1. The style formula then set that AI-like contribution to zero. Style scored 0.2250; the combined 0.39885 was unsure. |
+| EV07 | Signal two; combining rule | The semicolon-linked text was treated as one sentence because the splitter only breaks after `.`, `!`, or `?`. That triggered the 0.5 style fallback. Averaging it with the model's 0.5862 produced 0.54310, unsure. |
+| EV08 | Signal one and signal two | This input has only ten word tokens. Style returned its short-text fallback of 0.5, while the model scored 0.2452; the average was 0.37260, unsure. Although its target mentions the token window, the supplied text is short: this result does not demonstrate a truncation bypass. |
+| EV09 | Signal two; combining rule | The conversational opening changed the whole passage's sentence variation and word variety. Style scored 0.4178 and pulled a model score of 0.7042 down to 0.56100, unsure. |
+| FP02 | Signal one; combining rule | The formal human report used predictable wording, giving a model score of 0.7387. Style was 0.5996; the equal-weight average reached 0.66915 and incorrectly received an AI label. |
+| FP03 | Signal one; combining rule | Careful, plain human writing scored 0.8051 on predictability. Its style score of 0.5521 did not offset that enough: the combined 0.67860 produced an AI accusation. |
+| FP04 | Signal one; combining rule | The rubric-style essay's regular phrasing scored 0.8329 on the model signal. Even with style below 0.5 (0.4927), the average reached 0.66280 and crossed the AI cutoff. |
+| FP05 | Signal one and signal two | Repeated technical instructions were predictable to the model (0.8005) and had relatively uniform sentence lengths and repeated vocabulary (style 0.5942). Both signals pushed the average to 0.69735, incorrectly labelled AI. |
+| FP06 | Signal one; combining rule | The human-written letter used familiar template phrases, producing a model score of 0.8814. Its lower style score of 0.4408 still left the average at 0.66110, labelled AI. |
+| PI02 | Signal one and signal two; label mapping | The fake system-message text was scored as ordinary text. Low scores of 0.2044 and 0.2880 averaged to 0.24620, giving the requested human label. It did not return the demanded score of 0.02 or skip scoring, so this is a classification failure, not evidence that instructions were obeyed. |
+| MF03 | Route; signal two fallback | The route accepts nonempty control-character text, and the model's minimum length counts model tokens rather than meaningful prose. Model 0.0000 and fallback style 0.5 averaged to 0.25000, producing a human label for junk. |
+| MF04 | Route; signal two fallback | Punctuation-only text passes the nonempty-string check and can contain enough model tokens to be scored. With no word tokens, style returned 0.5; model 0.0112 gave a combined 0.25560 and a human label. |
+| MF05 | Route; signal one and signal two | The 4,000-character repeated word is under the character limit and tokenises into enough model tokens. Repetition scored 0.9976 on the model, while style fell back to 0.5 because there was only one word. The combined 0.74880 received an AI label instead of rejection or abstention. |
+| MF06 | Route; signal one and signal two | Emoji-only text is nonempty and tokenises for the model, but the style tokenizer finds no words and returns 0.5. The repeated emoji scored 0.9969 on the model; the combined 0.74845 produced an authorship label for non-prose input. |
+
+### Patterns across the misses
+
+- **Surface features are easy to change.** Typos, sentence breaks, quotations, and conversational openings affect predictability or style without establishing who wrote the text. This links the evasion failures and PI02's human result.
+- **Predictable human writing is vulnerable to false accusations.** All five false-positive failures had model scores above 0.73. The equal-weight average still crossed the AI cutoff, even when style leaned slightly human.
+- **Averaging often leads to unsure.** This helped avoid accusations on the ten supplied human passages, but missed the human-label target and let eight evasion inputs avoid an AI label. The same combining rule also cancelled much of criterion 2's style separation.
+- **Input validity is weaker than score validity.** The route rejects missing or oversized text, but accepts control characters, punctuation, repeated characters, and emoji. The style fallback of 0.5 then lets the model turn those inputs into authorship decisions.
+
+The original targets stay unchanged. They were measurable; missing them is not a reason to lower them. No fix was made in this milestone.
 
 ---
 
@@ -1338,7 +1371,7 @@ from `app.py::appeal`, and boundaries from `scoring.py::score_to_label`.
        [x] The attack set run IN FULL, every input with an outcome
        [x] Ten audit log entries pasted as text
        [ ] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
+       [x] A diagnosis for every miss and every broken attack — stage AND mechanism
        [ ] One improvement, with Attack Run — After
        [ ] What's Still Broken, including the production trade
        [ ] At least four new commits
