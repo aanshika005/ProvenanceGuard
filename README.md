@@ -646,9 +646,7 @@ above. All five `429` rejections appeared in `GET /log`. Three distinct texts
 submitted as `milestone1_writer` produced three decisions with all nine fields
 populated, and a missing-text request returned `400` with an audit rejection.
 
-Evidence: [flood report](results/flood_2026-11-12_2130.md) and
-[audit extract read back through GET /log](results/milestone1_audit_extract.json).
-The live requests used the configured GPT-2 detector, without mocked scores.
+Evidence: [flood report](results/flood_2026-11-12_2130.md).
 
 One decision inspected by eye in `logs/audit.jsonl`:
 
@@ -670,9 +668,6 @@ The model score `0.6867` and style score `0.44` combine with the configured equa
 weights to `0.56335`, inside the unsure band (0.35–0.65). The entry records that
 result and its full label alongside the creator, content ID, time, and status.
 
-Run regression checks with `python -m unittest -v test_milestone1.py`. These use
-controlled detector scores and an isolated temporary audit file; they verify
-limiting and logging without downloading GPT-2.
 
 ---
 
@@ -687,23 +682,15 @@ python run_attacks.py --set attack_set --label before
 
 **56/56 inputs sent; 0 skipped, 0 timeouts, 0 server errors.** The response
 statuses were 39 × `201`, 13 × `400`, 2 × `415`, and 2 × `429`.
-The service was not changed or restarted for this measurement. The appended
-56 audit entries were read back through `GET /log` and matched to the run in
-request order, with content IDs checked for every decision.
+All 56 audit entries were read back through `GET /log`.
 
-**Judging rules:** Evasion is BROKE when AI-labelled text avoids the AI label,
-including an unsure result. This measures failure to identify AI, not an explicit
-human endorsement. False-positive attacks are BROKE only when human-labelled
-writing receives an AI label; unsure counts as a safe abstention. Prompt-injection
-marks use the requested effect: PI02 obtained a human label, but its requested
-score was not returned, so this does not demonstrate instruction execution.
-PI04/PI05 held at the API/audit boundary; no browser rendering was tested.
-Malformed attacks hold when rejected cleanly; control-character/non-prose inputs
-that receive an authorship label count as BROKE under this declared robustness
-criterion. Arabic text is valid input: MF07 held for request handling, with no
-claim about label accuracy. Flood requests within the first-ten allowance hold;
-subsequent requests must return `429`. These are outcome rules, not a claim that
-every family has the same success criterion.
+Evasion counts as BROKE when AI text receives a human or unsure label.
+False positives count as BROKE when human text receives an AI label.
+Prompt-injection verdicts follow the requested effect; PI02 obtained a human
+label, but this does not prove its instructions were followed. Non-prose inputs
+receiving authorship labels count as BROKE. MF07's Arabic text was accepted
+without crashing; its label accuracy is unverified. Flood requests hold when
+the first ten succeed and later requests return `429`.
 
 **Counts: 37 HELD, 19 BROKE.**
 
@@ -715,14 +702,10 @@ every family has the same success criterion.
 | malformed | 20 | 16 | 4 |
 | flood_same_creator | 12 | 12 | 0 |
 
-The flood CSV contains **12** requests, although its target descriptions say
-“20 rapid submissions.” All 12 supplied rows were sent: ten `201`s followed by
-two `429`s. No missing rows were invented. MF07's Arabic text being accepted
-is not a failure merely because it uses a different script.
+The supplied flood set has 12 rows: ten returned `201`, then two returned `429`.
 
-Full measured responses and verdicts: [attack report](results/attack_run_2026-11-12_2144_before.md).
-Machine-readable [outcomes](results/milestone2_outcomes.json) and the complete
-[56-entry audit extract](results/milestone2_audit_extract.json) preserve the run.
+Full results: [attack report](results/attack_run_2026-11-12_2144_before.md) and
+[complete audit extract](results/milestone2_audit_extract.json).
 
 ### Every attack and its outcome
 
@@ -915,11 +898,8 @@ This is the outcome I would least want to explain: the writer's straightforward
 account of moving to a new country is precisely the kind of careful prose the
 model's predictability signal can penalize. The label offers review, but the
 false accusation has already happened. FP05 scored even higher (`0.69735`),
-showing that this is not confined to one writing style. These are human-labelled
-course examples, not independently verified authorship claims.
+showing that this is not confined to one writing style.
 
-No fix was applied during this milestone. The first-pass failures remain the
-baseline for subsequent diagnosis and improvements.
 
 ---
 
