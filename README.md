@@ -597,24 +597,6 @@ The log preserves the original decision and appends an appeal event with the sam
 - **What came back:** An AI-generated narrative with unusual details and varied sentence lengths, without a guarantee of its classification.
 - **What I changed:** I submitted it as calibration text and recorded model score 0.2758, style score 0.1406, and combined score 0.2082. I documented the human result as a false negative as well as evidence of label reachability. I then tested an appeal explicitly stating that the paragraph was AI-generated.
 
-### Moment 3: Rate Limits and Audit Logging
-
-- **What I asked for:** Help completing this unit's limiter and logging milestone.
-- **What came back:** AI enabled the limiter, added rejection logging, ran the flood check, and wrote up the results.
-- **What I changed:** I reviewed the README and asked for extra tests, duplicate files, and unnecessary wording to be removed.
-
-### Moment 4: Running and Diagnosing the Tests
-
-- **What I asked for:** Help running the supplied attack set and my five criteria, recording the results, and explaining the misses.
-- **What came back:** AI filled in `scenarios.py`, extended `run_eval.py` for appeals and the other required checks, ran three trials, and drafted the verdicts and diagnoses.
-- **What I changed:** I supplied the ten human passages used in the final run after the first attempt used AI-written substitutes. AI generated the ten comparison paragraphs on matching topics. I reviewed the results and requested simpler wording before approving the push.
-
-### Moment 5: One Improvement and Its Tradeoff
-
-- **What I asked for:** One change based on the diagnosis, followed by both full reruns and an honest comparison.
-- **What came back:** AI raised the AI threshold from 0.65 to 0.70, ran the attack set and three trials per criterion, and drafted the before-and-after results and remaining problems.
-- **What I changed:** I reviewed the README before approving the push. The results kept the original targets: five false accusations were removed, but criterion 3 became MISSED because its original boundary stayed at 0.65.
-
 ## Evaluation Status and Limitations
 
 The five acceptance targets and reasons are in [criteria.md](criteria.md). The samples demonstrate successful submission, label coverage, and append-only appeals; they do not establish that all five criteria pass across three trials. Original decision and appeal events use different audit schemas. Submission validation errors and detector failures are recorded as audit rejection entries.
