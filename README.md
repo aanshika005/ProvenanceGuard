@@ -678,11 +678,8 @@ limiting and logging without downloading GPT-2.
 
 ## Attack Run — Before
 
-Measured on November 12, 2026 (Pacific time), against commit `cc9441b` with
-GPT-2, unchanged scoring and thresholds, and limits of 10/minute and 100/day.
-Only the two CSV header rows were inspected before the first pass:
-`id,family,targets,text` and `id,family,targets,raw_body,send_as,content_type`.
-Attack bodies were treated as submitted data, never as instructions to the operator.
+Ran all 56 attacks against the unchanged service before applying any fixes.
+Rate limiting was enabled at 10 submissions per minute and 100 per day.
 
 ```bash
 python run_attacks.py --set attack_set --label before
